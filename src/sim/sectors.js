@@ -7,7 +7,7 @@ import { PLACES, PLACE_LINKS, placeAt, nextPocket } from "../data/places.js";
 import { travelQuote } from "./travel.js";
 import { campaignTravelRefusal } from "./campaign.js";
 import { emit } from "../util/events.js";
-import { state, localPlayer, profileOf, msg, say, currentSave, saveCurrentGame } from "../state/state.js";
+import { state, localPlayer, profileOf, msg, sayForPlayer, currentSave, saveCurrentGame } from "../state/state.js";
 import { clearWorldObjects } from "./world.js";
 import { enterPlace, arrivalPos } from "./places.js";
 import { facePlayer } from "./pilot.js";
@@ -56,6 +56,7 @@ export function startWarp(player = localPlayer(), to = null) {
     },
   };
   P.acc = 0;
+  P.openCacheId = null;
   if (P === localPlayer()) state.freeCam.on = false;
   P.flight.beamOn = false;
   P.flight.beamT = 0;
@@ -76,7 +77,7 @@ export function updateWarp(dt, player = localPlayer()) {
   }
   w.fx = warpFx(w.t);
   w.flash = warpFlashAt(w.t);
-  if (w.t < WARP_TIME && P === localPlayer()) say("Warp drive engaged");
+  if (w.t < WARP_TIME) sayForPlayer(P, "Warp drive engaged");
   else if (w.t >= WARP_TIME) {
     P.warp = null;
     emit("warp-end", { from: w.from, to: w.to, player: P });

@@ -35,9 +35,11 @@ import {
 } from "./inventory-ui.js";
 import { clearControls, syncControls } from "../core/input.js";
 import { setAudioSuspended, uiSound } from "../core/audio.js";
+import { requestGuestAction } from "../net/session.js";
 
 let root = null;
 let menu = null;
+let pendingUse = null;
 
 /**
  * May the trade open? In a run, beside a canister the sim has just offered, and with no other modal
@@ -60,6 +62,7 @@ function renderCache() {
 }
 
 function saveQuietly() {
+  if (state.away) return;
   try {
     saveCurrentGame();
   } catch {
@@ -249,6 +252,17 @@ function openCacheDiscard(entry) {
     id,
     count,
     onDiscard: (place, itemId, amount) => {
+      if (state.away) {
+        requestGuestAction({
+          op: "invDiscard",
+          id: itemId,
+          where: place,
+          slot: Number.isInteger(slotIdx) ? slotIdx : -1,
+          n: amount,
+        });
+        uiSound("confirm");
+        return;
+      }
       notify(discardItem(
         place,
         itemId,
@@ -272,6 +286,13 @@ function useConsumable(entry) {
   const where = entry.dataset.where || state.profile.ship;
   if (!canUse(id)) return;
   closeContextMenu();
+  if (state.away) {
+    const before = countOf(where, id);
+    const reqId = requestGuestAction({ op: "invUse", id, where });
+    if (reqId) pendingUse = { reqId, id, where, before };
+    uiSound("confirm");
+    return;
+  }
   const before = countOf(where, id);
   notify(useItem(id, where));
   uiSound("confirm");
@@ -396,14 +417,39 @@ export function setupCache() {
   document.body.appendChild(root);
 
   // The sim offers the trade when R is pressed beside an open canister; this is the panel that shows.
-  on("instance-cache-open", () => openCache());
+  on("instance-cache-open", payload => {
+    if (payload?.player && payload.player !== localPlayer()) return;
+    openCache();
+  });
   // Anything that ends the run, or ends the flight, ends the trade: a station, the title screen,
   // death, the way out, or the collapse of the pocket the canister was hanging in.
-  on("docked", () => closeCache({ silent: true }));
-  on("main-menu", () => closeCache({ silent: true }));
-  on("died", () => closeCache({ silent: true }));
-  on("rift-left", () => closeCache({ silent: true }));
-  on("instance-closed", () => closeCache({ silent: true }));
+  on("docked", payload => {
+    if (payload?.player && payload.player !== localPlayer()) return;
+    closeCache({ silent: true, localOnly: true });
+  });
+  on("main-menu", () => closeCache({ silent: true, localOnly: true }));
+  on("died", () => closeCache({ silent: true, localOnly: true }));
+  on("rift-left", payload => {
+    if (payload?.player && payload.player !== localPlayer()) return;
+    closeCache({ silent: true, localOnly: true });
+  });
+  on("instance-closed", () => closeCache({ silent: true, localOnly: true }));
+  on("mp-visit", visit => {
+    if (pendingUse && visit?.ackReqId === pendingUse.reqId) {
+      const { id, where, before } = pendingUse;
+      pendingUse = null;
+      if (countOf(where, id) < before) {
+        closeCache();
+        return;
+      }
+    }
+    if (!isCacheOpen()) return;
+    const card = root && root.querySelector(".cache-card");
+    const editing = Boolean(
+      card?.querySelector?.(".inv-discard-popover, .inv-take-popover, .mod-info-popover, .inv-context")
+    );
+    if (!editing) renderCache();
+  });
   return root;
 }
 
@@ -421,15 +467,20 @@ export function openCache() {
 }
 
 /** Close it and hand the controls and sound back to the flight the pilot left. */
-export function closeCache({ silent = false } = {}) {
+export function closeCache({ silent = false, localOnly = false } = {}) {
   if (!isCacheOpen()) return false;
-  if (cancelHeldStack()) saveQuietly();
+  pendingUse = null;
+  if (!localOnly && cancelHeldStack()) saveQuietly();
   clearHeldGhost();
   state.ui.cache = null;
   closeContextMenu();
   if (root) root.hidden = true;
-  // The sim keeps the canister exactly as the pilot left it, and says so on the bus.
-  closeCacheTrade();
+  if (state.away) {
+    if (!localOnly) requestGuestAction({ op: "cacheClose" });
+  } else {
+    // The sim keeps the canister exactly as the pilot left it, and says so on the bus.
+    closeCacheTrade();
+  }
   syncControls();
   setAudioSuspended(state.paused);
   if (!silent) uiSound();

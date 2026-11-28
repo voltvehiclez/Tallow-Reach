@@ -10,7 +10,7 @@ import { collideRockAt, collideSphereAt, placeCollidersOf, SHIP_RADIUS, reflectV
 import { enemyHullRadius } from "./enemy.js";
 import { REPAIR_MIN_HULL } from "../data/station.js";
 
-import { state, msg, localPlayer, profileOf, createPlayerRuntime } from "../state/state.js";
+import { state, msg, sayForPlayer, placeWorld, localPlayer, profileOf, createPlayerRuntime } from "../state/state.js";
 import { hasDrive, driveDraw } from "./drive.js";
 import { hasPower, setDraw } from "./power.js";
 import { refreshHull } from "./hull.js";
@@ -158,9 +158,11 @@ export function flight(dt, P = state.player, runtime = null) {
   P.noDriveT = Math.max(0, P.noDriveT - dt);
   if (!W && !powered && P.noDriveT === 0 && tryingToMove(c, stick)) {
     if (P === state.player) msg("Equip thrusters to move", NO_DRIVE_WARN);
+    else sayForPlayer(P, "Equip thrusters to move", 0.5);
     P.noDriveT = NO_DRIVE_WARN + 0.5;
   } else if (!W && !driveEnergy && P.noDriveT === 0 && tryingToMove(c, stick)) {
     if (P === state.player) msg("No stored power", NO_DRIVE_WARN);
+    else sayForPlayer(P, "No stored power", 0.5);
     P.noDriveT = NO_DRIVE_WARN + 0.5;
   }
 
@@ -235,7 +237,8 @@ export function flight(dt, P = state.player, runtime = null) {
   // ship itself is a sphere of SHIP_RADIUS. Resolution is the same push-out bounce the
   // old sphere tests used; only the hull is different.
   let pushed = false;
-  for (const a of state.world.asteroids) {
+  const pocket = placeWorld(P.place || state.place);
+  for (const a of pocket.asteroids) {
     const speed = P.v.length();
     const hit = collideRockAt(a.shape || 0, a.pos, a.quat, a.scale, P.pos.x, P.pos.y, P.pos.z, SHIP_RADIUS);
     if (!hit) continue;
@@ -251,7 +254,7 @@ export function flight(dt, P = state.player, runtime = null) {
   // other, and a hit above 25 m/s costs both sides the same collision damage the pilot
   // takes from a rock — shields first for them, raw hull for the hostile. A ram-kill
   // credits the pilot, via the same event the beam and bolts use.
-  for (const e of state.world.enemies) {
+  for (const e of pocket.enemies) {
     const rr = SHIP_RADIUS + enemyHullRadius(e);
     let dx = P.pos.x - e.pos.x, dy = P.pos.y - e.pos.y, dz = P.pos.z - e.pos.z;
     const d2 = dx * dx + dy * dy + dz * dz;

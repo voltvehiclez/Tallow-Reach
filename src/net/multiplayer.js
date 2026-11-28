@@ -137,7 +137,7 @@ export function guestOf(save, guestId) {
  * an entry that the cleaner would reject is a bug here, not a reason to fail a save.
  * Returns a new save.
  */
-export function putGuest(save, guestId, { name, token, epoch, rev, bundle, lastSeen, left } = {}) {
+export function putGuest(save, guestId, { name, token, epoch, rev, bundle, lastSeen, left, visitState } = {}) {
   const next = clone(save);
   const id = idText(guestId);
   if (!id) return next;
@@ -158,6 +158,7 @@ export function putGuest(save, guestId, { name, token, epoch, rev, bundle, lastS
     lastSeen: lastSeen ?? Date.now(),
     // An explicit `false` must clear the mark, so `left ?? old` would be wrong here.
     left: typeof left === "boolean" ? left : previous?.left === true,
+    visitState: visitState !== undefined ? visitState : previous?.visitState ?? null,
   });
   next.world.guests[id] = record;
   // Round-trip through the cleaner so the in-memory record and the saved one are the

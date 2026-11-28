@@ -7,7 +7,7 @@ import { itemName } from "../data/items.js";
 import { MISSILE } from "../data/weapons.js";
 import { shipDef } from "../data/ships.js";
 
-import { state, say, profileOf, placeWorld } from "../state/state.js";
+import { state, sayForPlayer, profileOf, placeWorld } from "../state/state.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
 import { setDraw, hasPower } from "./power.js";
@@ -90,7 +90,7 @@ export function updatePrimary(dt, P = state.player) {
     slot = primarySlotIndex(weapon, P),
     c = P.controls,
     d = shipDef(ship),
-    sayFor = text => { if (local) say(text); };
+    sayFor = (text, holdSec) => sayForPlayer(P, text, holdSec);
 
   // Every fitted gun counts down on its own, so two guns can fire out of step.
   P.guns.forEach((g, i) => {
@@ -249,7 +249,7 @@ export function updatePrimary(dt, P = state.player) {
   // reach — the progress toward the next ore is lost.
   if (!F.beamOn && F.beamT > 0) {
     F.beamT = 0;
-    sayFor("Beam contact lost — the ore starts again");
+    sayFor("Beam contact lost — the ore starts again", 0.35);
   }
 }
 
@@ -261,7 +261,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
   const local = P === state.player,
     F = P.flight,
     c = P.controls,
-    sayFor = text => { if (local) say(text); },
+    sayFor = (text, holdSec) => sayForPlayer(P, text, holdSec),
     W = placeWorld(P.place || state.place),
     ML = F.missileLock;
 
@@ -299,7 +299,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
       bestAngle = (MISSILE.cone * Math.PI) / 180;
     if (!local || !state.freeCam.on) {
       const selectedEnemy = F.lock?.k === "e" && W.enemies.includes(F.lock.o) && F.lock.o.hp > 0 && !F.lock.o.friendly ? F.lock.o : null;
-      const selectedPilot = F.lock?.k === "p" && otherPilotsThere(P).includes(F.lock.o) && !F.lock.o.dead ? F.lock.o : null;
+      const selectedPilot = F.lock?.k === "p" && otherPilotsThere(P).includes(F.lock.o) && !F.lock.o.dead && !F.lock.o.docked ? F.lock.o : null;
       for (const e of W.enemies) {
         if (e.hp <= 0 || e.friendly) continue;
         const q = enemyPos(e).clone().sub(pp),
@@ -313,7 +313,7 @@ export function updateMissiles(dt, P = state.player, advanceWorld = true) {
       }
       // Other pilots (guest/host) are lockable exactly like hostiles: same cone/range, same priority for F-lock
       for (const pilot of otherPilotsThere(P)) {
-        if (pilot.dead) continue;
+        if (pilot.dead || pilot.docked) continue;
         const q = pilot.pos.clone().sub(pp);
         const d = q.length();
         if (d > MISSILE.range) continue;

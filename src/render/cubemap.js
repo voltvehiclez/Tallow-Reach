@@ -32,7 +32,9 @@ export function orientFace(texture, index) {
     // v -> 1 - v. With clamp-to-edge there is nothing outside [0, 1] to smear in.
     texture.repeat.y = -1;
     texture.offset.y = 1;
-    texture.needsUpdate = true;
+    // TextureLoader marks the texture dirty once the async image decode finishes; setting
+    // needsUpdate before `texture.image` exists logs WebGLRenderer "image is undefined".
+    if (texture.image) texture.needsUpdate = true;
   }
   return texture;
 }

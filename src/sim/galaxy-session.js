@@ -127,3 +127,32 @@ export function switchGameMode(mode) {
 export function liveGalaxy() {
   return state.galaxy;
 }
+
+/** Rebuild the session galaxy catalog on a visiting guest to match the host's seed,
+ *  uncharted connections, and visited/known systems. */
+export function syncGuestGalaxy(galaxySnap, connections = null, visit = null) {
+  const seed = Number.isFinite(galaxySnap?.seed) ? galaxySnap.seed >>> 0 : GALAXY.seed;
+  const connList = Array.isArray(connections) ? connections : (state.worldState?.connections || []);
+  const galaxy = generateGalaxy(seed, GALAXY);
+  installUncharted(galaxy, {
+    connections: connList,
+    place: visit?.place,
+    instances: visit?.instance ? [visit.instance] : [],
+  });
+  setPlaceCatalog(galaxy);
+  for (const p of Object.values(galaxy.pockets)) {
+    if (p.connection) registerWormholePlace(p);
+  }
+  state.galaxy = galaxy;
+  if (state.worldState) {
+    state.worldState.galaxy = {
+      seed,
+      knowledge: galaxySnap?.knowledge && typeof galaxySnap.knowledge === "object"
+        ? JSON.parse(JSON.stringify(galaxySnap.knowledge))
+        : {},
+    };
+    if (Array.isArray(connections)) state.worldState.connections = JSON.parse(JSON.stringify(connections));
+    recordSystemVisit(galaxy, state.worldState.galaxy.knowledge, visit?.place || state.place);
+  }
+  return galaxy;
+}

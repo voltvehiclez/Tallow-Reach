@@ -5,7 +5,10 @@ import { pickLockSurface } from "./render/target-picking.js";
 
 import { renderer, scene, camera, stars, showPlace, stepScenery, updateScenery, forgetPlace } from "./render/scene.js";
 import { dockedView, chaseView, shakeOffset, installCameraControls } from "./render/camera.js";
-import { state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame, placeWorld } from "./state/state.js";
+import {
+  state, localPlayer, applySave, currentSave, newRootSave, saveCurrentGame, placeWorld, msg,
+  instanceAt, captureInstances, captureWormholes, clearInstances, clearWormholes,
+} from "./state/state.js";
 import { loadAutosave } from "./state/storage.js";
 import { shipCameraScale } from "./render/models.js";
 import { shipDef, shipTypeOf } from "./data/ships.js";
@@ -20,16 +23,18 @@ import { pocketBoomCount } from "./sim/effects.js";
 import { pocketPickCount, drainEFires } from "./sim/sfxlog.js";
 import { BULLET_COLOURS } from "./data/weapons.js";
 import { WARP } from "./data/sectors.js";
-import { DEFAULT_PLACE } from "./data/places.js";
+import { DEFAULT_PLACE, isPlace, placeAt, setPlaceCatalog } from "./data/places.js";
 import { loadPlace } from "./sim/places.js";
 import { clearNetEntities } from "./sim/world.js";
 import { toggleLock } from "./sim/targeting.js";
-import { launch, tryDock, resumeFromSave } from "./sim/session.js";
+import { launch, tryDock, dockFailureReason, resumeFromSave } from "./sim/session.js";
+import { syncSpeedFromVelocity } from "./sim/flight-instruments.js";
 import { startWarp } from "./sim/sectors.js";
-import { riftAction, restoreInstances } from "./sim/instances.js";
-import { restoreWormholes } from "./sim/wormholes.js";
+import { riftAction, restoreInstances, syncGuestInstance } from "./sim/instances.js";
+import { restoreWormholes, syncGuestWormholes } from "./sim/wormholes.js";
 import { jumpRoute } from "./sim/navigation.js";
-import { prepareGalaxySave } from "./sim/galaxy-session.js";
+import { setDestination } from "./state/destination.js";
+import { prepareGalaxySave, syncGuestGalaxy } from "./sim/galaxy-session.js";
 import { setupHud, updateHud } from "./ui/hud.js";
 import { notify } from "./ui/notice.js";
 import { syncPointer } from "./ui/pointer.js";
@@ -45,19 +50,22 @@ import {
   guestPlayers,
   applyGuestControls,
   executeGuestAction,
+  cancelGuestHeld,
   guestLockerSnapshot,
   guestProfileSnapshot,
+  guestVisitStateSnapshot,
 } from "./sim/multiplayer.js";
 import { hostProfile } from "./net/custody.js";
 import { shipEntries } from "./net/ships.js";
 import { createShipStream } from "./render/shipstream.js";
-import { createEntityStream, hasNetEntities, syncPocketEntities, collectGuestPocketSfx } from "./render/entitystream.js";
+import { createEntityStream, hasNetEntities, syncPocketEntities, syncPocketRocks, collectGuestPocketSfx } from "./render/entitystream.js";
 import {
   requestWarp as netRequestWarp,
   requestDock as netRequestDock,
   requestGuestAction,
   isOn as isNetOn,
 } from "./net/session.js";
+import { SHIP_STREAM } from "./data/multiplayer.js";
 import { enterPlace as simEnterPlace } from "./sim/places.js";
 import * as THREE from "three";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
@@ -119,10 +127,19 @@ import {
  *   `mp-state`           a session that ends forgets every friend at once, so a hull can never
  *                        outlive the connection that described it.
  */
-const shipStream = createShipStream();
-// Own ship needs its own interpolated buffer too — otherwise a 165 Hz guest sees its own hull at 24 Hz. Same timings but a shorter delay for responsiveness (35 ms vs 100 ms for other pilots).
-const guestSelfStream = createShipStream({ delayMs: 35, samples: 8, staleMs: 1500, snapM: 50 });
-const entityStream = createEntityStream({ delayMs: 50, samples: 8, staleMs: 1500, snapM: 50 });
+const STREAM_PACE_MS = 1000 / SHIP_STREAM.hz;
+const hrNow = (typeof performance === "object" && typeof performance?.timeOrigin === "number")
+  ? (perfMs = performance.now()) => performance.timeOrigin + perfMs
+  : () => Date.now();
+
+const shipStream = createShipStream({ paceMs: STREAM_PACE_MS });
+// Own ship and pocket entities buffer past at least two 24 Hz snapshots (`SHIP_STREAM.delayMs` = 100 ms)
+// with arrival dejittering (`paceMs`) so high-refresh screens (165/240 Hz) interpolate continuously
+// without running dry into hold-frames between packets.
+const guestSelfStream = createShipStream({ delayMs: SHIP_STREAM.delayMs, samples: 8, staleMs: 1500, snapM: 80, paceMs: STREAM_PACE_MS });
+// Projectiles (`cannon_basic` 900 m/s + ship speed = ~1200 m/s) travel ~50–150 m across 1–3 packets;
+// snapM: 300 keeps cannon shots interpolating smoothly at 240 Hz while still snapping real teleports.
+const entityStream = createEntityStream({ delayMs: SHIP_STREAM.delayMs, samples: 8, staleMs: 1500, snapM: 300, paceMs: STREAM_PACE_MS });
 const boomSeen = new Map();
 const pickSeen = new Map();
 
@@ -133,9 +150,26 @@ function isGuestVisiting() {
 
 let lastVisitShip = "";
 let lastVisitShipAt = 0;
+let lastVisitDockState = null;
 let lastVisitDockAt = 0;
+let dockStreamCaughtUp = true;
 let latestSlotReqId = 0;
 let lastVisitSnapshot = null;
+let pendingNetPlace = "";
+let lastGuestGeoSig = "";
+
+function sendGuestLock(lock) {
+  if (!isGuestVisiting()) return;
+  if (!lock) { requestGuestAction({ op: "lock", kind: "clear" }); return; }
+  if (lock.k === "e" && lock.o?.id) requestGuestAction({ op: "lock", kind: "enemy", id: String(lock.o.id) });
+  else if (lock.k === "a") requestGuestAction({ op: "lock", kind: "rock", id: String(lock.o?._hostId || lock.o?.id || "") });
+  else if (lock.k === "c" && lock.o?.id) requestGuestAction({ op: "lock", kind: "crate", id: String(lock.o.id) });
+  else if (lock.k === "r" && lock.o?.id) requestGuestAction({ op: "lock", kind: "rift", id: String(lock.o.id) });
+  else if (lock.k === "g" && lock.o?.id) requestGuestAction({ op: "lock", kind: "gate", id: String(lock.o.id) });
+  else if (lock.k === "k" && lock.o?.id) requestGuestAction({ op: "lock", kind: "cache", id: String(lock.o.id) });
+  else if (lock.k === "p") requestGuestAction({ op: "lock", kind: "pilot", id: String(lock.o?.id || lock.o?.guestId || "host") });
+  else if (lock.k === "s" && lock.o?.feature) requestGuestAction({ op: "lock", kind: "station", id: String(lock.o.feature) });
+}
 
 /* The own weapon-effects block: the sim-side counters arrive on the own ship entry; a counter that
  * advanced plays its sound once (a lost packet collapses two into one, never a backlog). Counters
@@ -160,6 +194,7 @@ function applyOwnWeaponWx(entry) {
     if (sb) F.beamStart = sb;
     if (eb) F.beamEnd = eb;
     if (Number.isFinite(entry.mineFrac)) F.mineFrac = entry.mineFrac;
+    F.beamT = F.beamOn && Number.isFinite(entry.beamT) ? Math.max(0, entry.beamT) : 0;
     // The lock ring and the cone follow the host's truth; the guest simulates no missiles.
     if (Number.isFinite(entry.cone)) F.coneAngle = entry.cone;
     const ML = F.missileLock || (F.missileLock = { target: null, t: 0, locked: false });
@@ -167,6 +202,22 @@ function applyOwnWeaponWx(entry) {
     ML.locked = entry.lockLocked === true;
     // A lock needs a target object; a stub is all the HUD reads (truthy). The host's record stays host-side.
     ML.target = entry.lockTarget === true ? (ML.target || { _net: true }) : null;
+  }
+  const P = localPlayer();
+  if (P?.power) {
+    const cap = Math.max(0, Number(P.power.cap) || 0);
+    if (cap > 0) {
+      const pwr = Number.isFinite(entry.pwr) ? Math.max(0, Math.min(1, entry.pwr)) : 1;
+      P.power.stored = pwr * cap;
+    }
+    P.power.draw = Number.isFinite(entry.pwrDraw) ? Math.max(0, entry.pwrDraw) : 0;
+  }
+  if (P && Number(P.enMax) > 0) {
+    const ef = Number.isFinite(entry.enFrac) ? Math.max(0, Math.min(1, entry.enFrac)) : 1;
+    P.en = ef * P.enMax;
+  }
+  if (state.hud) {
+    state.hud.prompt = typeof entry.hint === "string" ? entry.hint : "";
   }
   if (!ownWxBaselined) {
     // First picture after joining: adopt the host's counters without a salvo of stale sounds.
@@ -204,18 +255,35 @@ function applySelfShip(entry) {
   const prevPlace = P.place;
   const prevPos = P.pos.clone();
   const wasDocked = P.docked === true;
+  const wasWarping = Boolean(P.warp);
+  const streamDocked = entry.docked === true;
+  if (lastVisitDockState !== null && !dockStreamCaughtUp) {
+    if (streamDocked !== lastVisitDockState && Date.now() - lastVisitDockAt < 1500) {
+      // Ignore pre-transition snapshots lingering in the buffered stream (e.g. a stale `docked: true`
+      // pose right after `launch()`) so the ship never snaps back to station coordinates or freezes.
+      return;
+    }
+    dockStreamCaughtUp = true;
+  }
   const placeId = typeof entry.place === "string" ? entry.place.trim() : "";
-  // Place first: entering a new pocket builds its scenery and sky.
+  // Place first: entering a new pocket builds its scenery and sky. If a dynamic place
+  // (`wh-...`, `inst-...`) arrives on the ship stream before `visit` has registered it,
+  // defer `simEnterPlace` until `applyVisitSnapshot` installs the host catalog/instance.
   if (placeId && placeId !== state.place && placeId !== P.place) {
-    try {
-      const entered = simEnterPlace(placeId, P);
-      if (!entered) {
-        P.place = placeId;
-        state.place = placeId;
-        emit("place-entered", { id: placeId, player: P });
-      }
-    } catch (e) { /* a bad place id must not crash the frame */ }
-  } else if (placeId && placeId !== P.place) {
+    if (isPlace(placeId)) {
+      pendingNetPlace = "";
+      try {
+        const entered = simEnterPlace(placeId, P);
+        if (!entered) {
+          P.place = placeId;
+          state.place = placeId;
+          emit("place-entered", { id: placeId, player: P });
+        }
+      } catch (e) { /* a bad place id must not crash the frame */ }
+    } else {
+      pendingNetPlace = placeId;
+    }
+  } else if (placeId && placeId !== P.place && isPlace(placeId)) {
     P.place = placeId;
   }
   const shipType = typeof entry.ship === "string" ? entry.ship.trim() : "";
@@ -236,7 +304,11 @@ function applySelfShip(entry) {
       refreshGuns(P);
     }
   }
-  if (prevPlace && P.place && prevPlace !== P.place) entityStream.forgetPlace(prevPlace);
+  if (prevPlace && P.place && prevPlace !== P.place) {
+    if (P.flight) P.flight.lock = null;
+    entityStream.forgetPlace(prevPlace);
+    try { emit("place-changed", { from: prevPlace, to: P.place, player: P }); } catch (e) {}
+  }
   // Position/rotation/velocity/throttle/docked/dead — the host's truth. Guest does not simulate.
   // `entry` may be a shipstream sample (pos is Vector3/Quaternion) or the raw wire entry (arrays).
   const pos = entry.pos;
@@ -249,15 +321,22 @@ function applySelfShip(entry) {
   if (Array.isArray(vel)) P.v.set(vel[0], vel[1], vel[2]);
   else if (vel && typeof vel.x === "number") P.v.copy(vel);
   P.thr = Number.isFinite(entry.throttle) ? entry.throttle : P.thr;
-  const withinDockGrace = lastVisitDockAt && (Date.now() - lastVisitDockAt < 250);
-  if (!withinDockGrace) P.docked = entry.docked === true;
+  P.docked = streamDocked;
   P.dead = entry.dead === true;
   P.boost = entry.boost === true;
+  if (P.docked) {
+    P.v.set(0, 0, 0);
+    P.thr = 0;
+  }
   if (Number.isFinite(entry.shake)) P.shake = Math.max(0, Math.min(1, Number(entry.shake) || 0));
   // The station card and the reticle follow the host's dock decisions, like a local dock: this is
   // what puts the guest in the station screen (and its own suitcase on it) when the host docks it.
   if (P.docked !== wasDocked) {
     try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) { /* UI must never break the net path */ }
+    if (!P.docked) {
+      if ((P.drive?.spd || 0) > 0) msg("Launched. Fly to the asteroid field.", 4);
+      else msg("No thrusters fitted: the ship cannot move. Press G to dock and fit one.", 6);
+    }
   }
   if (Number.isFinite(entry.hull)) {
     const max = Number(P.hullMax) || 0;
@@ -275,12 +354,20 @@ function applySelfShip(entry) {
     if (wantWarp) {
       const fx = Number.isFinite(entry.warpFx) ? Math.max(0, Math.min(1, entry.warpFx)) : 0;
       const flash = Number.isFinite(entry.warpFlash) ? Math.max(0, Math.min(1, entry.warpFlash)) : 0;
-      const w = P.warp || (P.warp = { from: "", to: "", t: 0, fx: 0, flash: 0, switched: false, steer: { x: 0, y: 0 } });
+      const w = P.warp || (P.warp = { from: prevPlace || P.place || "", to: "", t: 0, fx: 0, flash: 0, switched: false, steer: { x: 0, y: 0 } });
       w.fx = fx; w.flash = flash;
     } else if (P.warp) {
+      const warpFrom = P.warp.from || prevPlace;
       P.warp = null;
+      if (wasWarping && warpFrom && P.place && warpFrom !== P.place) {
+        try {
+          const fromDef = placeAt(warpFrom), destDef = placeAt(P.place);
+          if (fromDef && destDef) msg(`Warp: ${fromDef.n} to ${destDef.n}. ${destDef.d}`, 4);
+        } catch (e) {}
+      }
     }
   }
+  syncSpeedFromVelocity(P, Boolean(P.warp));
   // A warp, dock/launch transition, or teleport jump must snap the camera instead of panning.
   if (
     P.snap !== true &&
@@ -293,12 +380,17 @@ function applySelfShip(entry) {
 /* Stash our own galaxy place + checked-out home save while visiting, so Go home can restore cleanly. */
 function stashGuestHome() {
   if (state.guestHome) return;
+  captureInstances();
+  if (state.mode !== "campaign") captureWormholes();
   state.guestHome = {
     place: state.place,
     worldPlace: state.worldState ? state.worldState.place : state.place,
     docked: localPlayer()?.docked !== false,
     profile: state.profile ? JSON.parse(JSON.stringify(state.profile)) : null,
     worldState: state.worldState ? JSON.parse(JSON.stringify(state.worldState)) : null,
+    galaxy: state.galaxy || null,
+    shops: state.shops ? JSON.parse(JSON.stringify(state.shops)) : {},
+    destination: state.ui?.destination ?? null,
   };
 }
 function restoreGuestHome() {
@@ -311,26 +403,44 @@ function restoreGuestHome() {
   pickSeen.clear();
   lastVisitShip = "";
   lastVisitShipAt = 0;
+  lastVisitDockState = null;
   lastVisitDockAt = 0;
+  dockStreamCaughtUp = true;
   latestSlotReqId = 0;
   lastVisitSnapshot = null;
+  pendingNetPlace = "";
+  lastGuestGeoSig = "";
+  if (isCacheOpen()) closeCache({ localOnly: true });
   clearHeldGhost();
   state.ui.invHeld = null;
   if (!home) return;
   const id = home.place || home.worldPlace;
   state.guestHome = null;
+  for (const instId of [...state.instances.keys()]) forgetPlace(instId);
+  clearInstances();
+  for (const whId of [...state.wormholes.keys()]) forgetPlace(whId);
+  clearWormholes();
   if (home.profile) state.profile = home.profile;
   if (home.worldState) state.worldState = home.worldState;
+  state.shops = home.shops ? JSON.parse(JSON.stringify(home.shops)) : {};
+  setDestination(home.destination ?? null);
+  if (home.galaxy) {
+    state.galaxy = home.galaxy;
+    setPlaceCatalog(home.galaxy);
+  }
+  restoreInstances();
+  if (state.mode !== "campaign") restoreWormholes(true);
   const P = localPlayer();
   if (P && state.profile) {
     P.profile = state.profile;
     P.weapon = state.profile.pw;
     P.secondaryWeapon = state.profile.sw;
     P.missileStock = state.profile.msl;
+    P.openCacheId = null;
   }
   if (typeof id === "string" && id) {
     const wasDocked = P?.docked === true;
-    try { simEnterPlace(id, P); } catch (e) {}
+    try { simEnterPlace(id, P); } catch (e) { console.error("[restoreGuestHome] enter place failed", e); }
     showPlace(state.place);
     if (P) {
       P.warp = null;
@@ -345,10 +455,39 @@ function restoreGuestHome() {
         refreshGuns(P);
       }
       if (!state.ui.intro && P.docked !== wasDocked) {
-        try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {}
+        try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) { console.error("[restoreGuestHome] event failed", e); }
       }
     }
   }
+}
+
+function syncGuestWorldGeography(visit) {
+  if (!visit || typeof visit !== "object") return;
+  if (visit.shops && typeof visit.shops === "object") {
+    state.shops = JSON.parse(JSON.stringify(visit.shops));
+  }
+  const seed = Number.isFinite(visit.galaxy?.seed) ? visit.galaxy.seed >>> 0 : null;
+  const connEpochs = Array.isArray(visit.connections) ? visit.connections.map(c => c?.epoch ?? 0).join(",") : "";
+  const geoSig = `${seed ?? ""}|${connEpochs}`;
+  let rebuiltGalaxy = false;
+  if (seed !== null && geoSig !== lastGuestGeoSig) {
+    lastGuestGeoSig = geoSig;
+    syncGuestGalaxy(visit.galaxy, visit.connections || [], visit);
+    rebuiltGalaxy = true;
+  } else if (visit.galaxy && state.worldState?.galaxy) {
+    if (visit.galaxy.knowledge && typeof visit.galaxy.knowledge === "object") {
+      state.worldState.galaxy.knowledge = JSON.parse(JSON.stringify(visit.galaxy.knowledge));
+    }
+    if (Array.isArray(visit.connections)) {
+      state.worldState.connections = JSON.parse(JSON.stringify(visit.connections));
+    }
+  }
+  if (Array.isArray(visit.wormholes) && (rebuiltGalaxy || JSON.stringify(visit.wormholes) !== JSON.stringify(state.worldState?.wormholes || []))) {
+    syncGuestWormholes(visit.wormholes);
+  } else if (rebuiltGalaxy && state.worldState?.wormholes) {
+    syncGuestWormholes(state.worldState.wormholes);
+  }
+  syncGuestInstance(visit.instance || null);
 }
 
 function applyVisitSnapshot(visit) {
@@ -389,6 +528,7 @@ function applyVisitSnapshot(visit) {
 
   state.ui.invHeld = visit.held ? { ...visit.held } : null;
   syncHeldGhost();
+  syncGuestWorldGeography(visit);
 
   if (P && state.profile) {
     P.profile = state.profile;
@@ -405,30 +545,84 @@ function applyVisitSnapshot(visit) {
         setShip(nextShip, P, state.profile);
       }
     }
+    const prevPowerStored = P.power?.stored;
+    const prevPowerDraw = P.power?.draw;
+    const prevEn = P.en;
     refillPower(P);
     refreshDrive(P);
     refreshShield(P);
     refreshHull(P);
     refreshGuns(P);
+    if (visit.docked !== true && P.docked !== true) {
+      if (P.power && Number.isFinite(prevPowerStored)) P.power.stored = Math.min(P.power.cap || 0, prevPowerStored);
+      if (P.power && Number.isFinite(prevPowerDraw)) P.power.draw = prevPowerDraw;
+      if (Number.isFinite(prevEn)) P.en = Math.min(P.enMax || 0, prevEn);
+    }
     if (Number.isFinite(visit.hullMax) && visit.hullMax > 0) P.hullMax = visit.hullMax;
     if (Number.isFinite(visit.hull)) P.hull = visit.hull;
     if (Number.isFinite(visit.shieldMax)) P.shMax = visit.shieldMax;
     if (Number.isFinite(visit.shield)) P.sh = visit.shield;
-    if (visit.place && visit.place !== state.place) {
+    if (visit.place && (visit.place !== state.place || visit.place !== P.place || pendingNetPlace === visit.place)) {
+      const prevPlace = P.place || state.place;
+      pendingNetPlace = "";
       try {
         if (!simEnterPlace(visit.place, P)) {
           P.place = visit.place;
           state.place = visit.place;
           emit("place-entered", { id: visit.place, player: P });
         }
-      } catch (e) {}
+        if (prevPlace && P.place && P.place !== prevPlace) {
+          if (P.flight) P.flight.lock = null;
+          entityStream.forgetPlace(prevPlace);
+          emit("place-changed", { from: prevPlace, to: P.place, player: P });
+        }
+      } catch (e) {
+        console.error("[applyVisitSnapshot] enter place failed", e);
+      }
     }
     const wantDocked = visit.docked === true;
-    if (wantDocked !== (P.docked === true)) {
+    if (wantDocked !== lastVisitDockState) {
+      lastVisitDockState = wantDocked;
       lastVisitDockAt = Date.now();
+      dockStreamCaughtUp = false;
+    }
+    if (wantDocked !== (P.docked === true)) {
       P.docked = wantDocked;
+      if (P.docked) {
+        P.v.set(0, 0, 0);
+        P.thr = 0;
+        syncSpeedFromVelocity(P, Boolean(P.warp));
+      } else {
+        if ((P.drive?.spd || 0) > 0) msg("Launched. Fly to the asteroid field.", 4);
+        else msg("No thrusters fitted: the ship cannot move. Press G to dock and fit one.", 6);
+      }
       P.snap = true;
-      try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {}
+      try { emit(P.docked ? "docked" : "launched", { player: P }); } catch (e) {
+        console.error("[applyVisitSnapshot] event failed", e);
+      }
+    }
+
+    const cacheSnap = visit.instance?.cache;
+    const cacheStockQty = cacheSnap?.stock
+      ? Object.values(cacheSnap.stock).reduce((a, b) => a + Math.max(0, Math.floor(Number(b) || 0)), 0)
+      : 0;
+    const shouldOpenCache = !P.docked && visit.instance?.id === state.place &&
+      cacheSnap?.open === true && cacheSnap?.tradeOpen === true && cacheStockQty > 0;
+    if (shouldOpenCache) {
+      P.openCacheId = visit.instance.id;
+      if (!isCacheOpen()) {
+        emit("instance-cache-open", {
+          id: visit.instance.id,
+          loot: cacheSnap.loot,
+          n: cacheSnap.n,
+          left: cacheStockQty,
+          profile: state.profile,
+          player: P,
+        });
+      }
+    } else {
+      P.openCacheId = null;
+      if (isCacheOpen()) closeCache({ localOnly: true });
     }
   }
 
@@ -442,7 +636,9 @@ function applyVisitSnapshot(visit) {
         message: newlyFailed.failureMessage || "It can no longer be completed.",
         player: P,
       });
-    } catch (e) {}
+    } catch (e) {
+      console.error("[applyVisitSnapshot] mission-failed event failed", e);
+    }
   }
   if (visit.notice) notify(visit.notice);
   if (visit.sound) uiSound(visit.sound);
@@ -457,15 +653,25 @@ function installMultiplayerShips() {
     });
     request.answered = true;
   });
-  on("mp-ships", ({ ships, at } = {}) => shipStream.receive(ships, at));
+  on("mp-ships", ({ ships, at } = {}) => shipStream.receive(ships, at || hrNow()));
   on("mp-self-ship", ({ ship, at } = {}) => {
     if (!isGuestVisiting() || !ship) return;
-    // Own ship is also a stream (see guestSelfStream) so a 165 Hz guest does not see its
-    // own hull at 24 Hz. The pose is interpolated like any other pilot, but with a shorter
-    // delay (60 ms vs 100 ms) so controls feel less laggy; the frame loop samples it each frame.
-    guestSelfStream.receive([ship], at || Date.now());
+    // Own ship uses the same buffer depth (`SHIP_STREAM.delayMs` = 100 ms) + arrival pacing so
+    // high-refresh guests (165/240 Hz) interpolate continuously instead of stalling between packets.
+    guestSelfStream.receive([ship], at || hrNow());
   });
   on("mp-visit", visit => applyVisitSnapshot(visit));
+  on("mp-refresh-home", () => {
+    state.guestHome = null;
+    if (state.away) stashGuestHome();
+  });
+  on("mp-refresh-visit", () => {
+    if (isGuestVisiting() && lastVisitSnapshot) {
+      applyVisitSnapshot(lastVisitSnapshot);
+      const latestSelf = guestSelfStream.sample(hrNow());
+      if (latestSelf.length) applySelfShip(latestSelf[0]);
+    }
+  });
   on("mp-enter-world", () => {
     if (isGuestVisiting() && lastVisitSnapshot) applyVisitSnapshot(lastVisitSnapshot);
   });
@@ -497,15 +703,29 @@ function installMultiplayerShips() {
  *                          host's own, and a record the next snapshot no longer names is dropped
  */
 function installMultiplayerEntities() {
+  const lastPocketGuestKey = new Map();
+  const lastPocketRockSig = new Map();
   // Host: answer what is in every pocket that holds a visitor, so the guest sees the same sky.
   on("mp-entities-request", request => {
     if (!request || !Array.isArray(request.places)) return;
-    const wanted = new Set();
-    for (const g of guestPlayers()) if (g?.place) wanted.add(g.place);
+    const guestsByPlace = new Map();
+    for (const g of guestPlayers()) {
+      if (!g?.place) continue;
+      let ids = guestsByPlace.get(g.place);
+      if (!ids) { ids = []; guestsByPlace.set(g.place, ids); }
+      ids.push(g.guestId || String(g.id || ""));
+    }
+    for (const k of [...lastPocketGuestKey.keys()]) {
+      if (!guestsByPlace.has(k)) {
+        lastPocketGuestKey.delete(k);
+        lastPocketRockSig.delete(k);
+      }
+    }
     request.places.length = 0;
     const vec = v => [v.x, v.y, v.z];
     const quat = q => (q ? [q.x, q.y, q.z, q.w] : [0, 0, 0, 1]);
-    for (const placeId of wanted) {
+    const nowMs = Date.now();
+    for (const [placeId, guestIds] of guestsByPlace) {
       const W = placeWorld(placeId);
       if (!W) continue;
       const bullets = (W.bullets || []).map(e => ({
@@ -540,13 +760,84 @@ function installMultiplayerEntities() {
         if (e.missionOwner) row.missionOwner = e.missionOwner;
         return row;
       });
+      // Sync asteroids on pocket entry, depletion/respawn, or active mining (~12 Hz throttle)
+      // so guests see depleted rocks gone, shrinking rocks shrink, and respawned rocks return.
+      const asteroids = W.asteroids || [];
+      const guestKey = guestIds.slice().sort().join(",");
+      const entered = lastPocketGuestKey.get(placeId) !== guestKey;
+      lastPocketGuestKey.set(placeId, guestKey);
+      const rockSig = `${asteroids.length}|${asteroids.map(r => `${r.id}:${Math.round((r.ore || 0) * 10)}`).join(",")}`;
+      const prevRock = lastPocketRockSig.get(placeId);
+      const countChanged = !prevRock || prevRock.count !== asteroids.length;
+      const oreChanged = !prevRock || prevRock.sig !== rockSig;
+      let rocks;
+      if (entered || countChanged || (oreChanged && nowMs - prevRock.at >= 80)) {
+        lastPocketRockSig.set(placeId, { sig: rockSig, count: asteroids.length, at: nowMs });
+        rocks = asteroids.map(r => ({
+          id: r.id,
+          type: r.type || "ferrite",
+          shape: r.shape || 0,
+          r: r.r || 10,
+          ore: r.ore || 0,
+          max: r.max || 1,
+          pos: vec(r.pos),
+          quat: quat(r.quat),
+          s0: vec(r.s0 || { x: r.r || 10, y: r.r || 10, z: r.r || 10 }),
+          scale: vec(r.scale || r.s0 || { x: r.r || 10, y: r.r || 10, z: r.r || 10 }),
+        }));
+      }
+      // Rifts, instance gates, and instance caches for this pocket so guests draw and R-interact
+      // identically to host.
+      const rifts = (W.rifts || []).filter(e => e && !e.gone).map(e => ({
+        id: e.id,
+        pos: vec(e.pos),
+        quat: quat(e.quat),
+        n: e.n || "Rift",
+        dest: e.dest || "",
+        r: e.r || 26,
+        spin: e.spin ?? 0.35,
+        ...(e.variant ? { variant: e.variant } : {}),
+        ...(e.instance ? { instance: e.instance } : {}),
+        ...(e.wormhole ? { wormhole: e.wormhole } : {}),
+        ...(e.template ? { template: e.template } : {}),
+        ...(e.peer ? { peer: e.peer } : {}),
+        ...(e.locked ? { locked: true } : {}),
+        ...(e.reentrant ? { reentrant: true } : {}),
+      }));
+      const gates = (W.gates || []).filter(e => e && !e.gone).map(e => ({
+        id: e.id,
+        pos: vec(e.pos),
+        quat: quat(e.quat),
+        n: e.n || "Way out",
+        r: e.r || 26,
+        spin: e.spin ?? 0.35,
+        locked: !!e.locked,
+        exit: e.exit !== false,
+        ...(e.variant ? { variant: e.variant } : {}),
+      }));
+      const caches = (W.caches || []).filter(e => e && !e.gone).map(e => ({
+        id: e.id,
+        pos: vec(e.pos),
+        quat: quat(e.quat),
+        n: e.n || "Cache",
+        r: e.r || 10,
+        spin: e.spin ?? 0.35,
+        locked: e.locked !== false,
+        ...(e.loot ? { loot: e.loot } : {}),
+      }));
       // Always answer for a pocket with a visitor — even with empty lists, so the guest clears
       // what is no longer there.
-      request.places.push({ place: placeId, bullets, missiles, crates, fx, booms: pocketBoomCount(placeId), enemies, picks: pocketPickCount(placeId), efires: drainEFires(placeId) });
+      request.places.push({
+        place: placeId, bullets, missiles, crates, fx,
+        booms: pocketBoomCount(placeId), enemies,
+        picks: pocketPickCount(placeId), efires: drainEFires(placeId),
+        rifts, gates, caches,
+        ...(rocks ? { rocks } : {}),
+      });
     }
     request.answered = true;
   });
-  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires } = {}) => {
+  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires, rocks, rifts, gates, caches, at } = {}) => {
     if (!place || typeof place !== "string" || !isGuestVisiting()) return;
     if (place !== state.place) return;   // entities only for the pocket this screen is in
     const W = placeWorld(place);
@@ -556,9 +847,10 @@ function installMultiplayerEntities() {
       try { emit("sfx", sfx); } catch (e) {}
     }
     try {
-      const nowMs = Date.now();
+      if (Array.isArray(rocks)) syncPocketRocks(W, rocks, place);
+      const nowMs = at || hrNow();
       const firstArrival = !hasNetEntities(W);
-      entityStream.receive({ place, bullets, missiles, crates, fx, enemies }, nowMs);
+      entityStream.receive({ place, bullets, missiles, crates, fx, enemies, rifts, gates, caches }, nowMs);
       if (firstArrival) {
         const initial = entityStream.samplePlace(place, nowMs);
         if (initial) syncPocketEntities(W, initial, place);
@@ -568,15 +860,16 @@ function installMultiplayerEntities() {
 }
 
 function installMultiplayerVisitors() {
-  on("mp-guest-arrive", ({ guestId, name, bundle } = {}) => {
+  on("mp-guest-arrive", ({ guestId, name, bundle, visitState = null } = {}) => {
     if (!bundle) return;
-    const profile = hostProfile(bundle);
+    const profile = hostProfile(bundle, visitState);
     arriveGuest({
       guestId,
       name,
       profile,
       place: bundle.homeStation || null,
       lockers: Array.isArray(bundle.lockers) ? bundle.lockers : [],
+      visitState,
     });
   });
   on("mp-guest-left", ({ guestId } = {}) => {
@@ -595,23 +888,45 @@ function installMultiplayerVisitors() {
   on("mp-guest-warp", ({ guestId, to } = {}) => {
     const P = guestRecordOf(guestId);
     if (!P || !to) return;
-    try { startWarp(P, to); } catch (e) {}
+    try {
+      startWarp(P, to);
+    } catch (e) {
+      console.error("[mp-guest-warp]", e);
+      if (typeof document !== "undefined") reportCrash("mp-guest-warp", e);
+    }
     emit("mp-guest-visit-push", { guestId });
+  });
+  on("travel-denied", ({ player, reason } = {}) => {
+    if (player?.guestId && reason) {
+      emit("mp-guest-visit-push", { guestId: player.guestId, notice: reason });
+    }
   });
   on("mp-guest-dock", ({ guestId } = {}) => {
     const P = guestRecordOf(guestId);
     if (!P) return;
+    const wasDocked = P.docked === true;
+    let notice = "";
     // One button, like a local dock: in flight it docks, docked it launches. A visitor cannot
     // `launch()` locally (the teleport-to-launch-point bug), so both directions ride the host's
-    // sim — `docked` follows on the next snapshot.
+    // sim — `docked` follows immediately on both `visit` and `ships`.
     try {
       if (P.docked) launch(P, P.profile);
       else {
         cancelGuestHeld(P);
-        tryDock(P, P.profile, P.guestWorld || state.worldState);
+        if (!tryDock(P, P.profile, P.guestWorld || state.worldState)) {
+          notice = dockFailureReason(P, P.profile);
+        }
       }
-    } catch (e) {}
-    emit("mp-guest-visit-push", { guestId });
+    } catch (e) {
+      console.error("[mp-guest-dock]", e);
+      if (typeof document !== "undefined") reportCrash("mp-guest-dock", e);
+      notice = "Docking failed unexpectedly.";
+    }
+    emit("mp-guest-visit-push", {
+      guestId,
+      notice,
+      dockTransition: wasDocked !== (P.docked === true),
+    });
   });
   on("mp-guest-act", request => {
     if (!request?.guestId || !request?.action) return;
@@ -621,6 +936,31 @@ function installMultiplayerVisitors() {
   on("mp-guest-visit-request", request => {
     const P = guestRecordOf(request?.guestId);
     if (!P?.profile) return;
+    const rec = P.place ? instanceAt(P.place) : null;
+    const instance = rec && !rec.gone ? {
+      id: rec.id,
+      template: rec.template,
+      seed: rec.seed,
+      tier: rec.tier,
+      origin: rec.origin,
+      lifetime: rec.lifetime,
+      totalLifetime: rec.totalLifetime,
+      warned: !!rec.warned,
+      expired: !!rec.expired,
+      mined: rec.mined || 0,
+      spawned: !!rec.spawned,
+      objectiveMet: !!rec.objective?.met,
+      cache: rec.cache ? {
+        n: rec.cache.n,
+        loot: rec.cache.loot,
+        open: !!rec.cache.open,
+        tradeOpen: !!(rec.cache.open && P.openCacheId === rec.id),
+        stock: { ...(rec.cache.stock || {}) },
+        slots: Array.isArray(rec.cache.slots)
+          ? rec.cache.slots.map(s => (Array.isArray(s) && s[0] ? [s[0], s[1]] : null))
+          : null,
+      } : null,
+    } : null;
     request.snapshot = {
       docked: !!P.docked,
       place: P.place || DEFAULT_PLACE,
@@ -632,13 +972,24 @@ function installMultiplayerVisitors() {
       shield: Number.isFinite(P.sh) ? P.sh : 0,
       shieldMax: Number.isFinite(P.shMax) ? P.shMax : 0,
       held: P.guestHeld ? { ...P.guestHeld } : null,
+      openCacheId: P.openCacheId || "",
       profile: JSON.parse(JSON.stringify(P.profile)),
       world: JSON.parse(JSON.stringify(P.guestWorld || {})),
+      galaxy: state.worldState?.galaxy ? {
+        seed: state.worldState.galaxy.seed,
+        knowledge: JSON.parse(JSON.stringify(state.worldState.galaxy.knowledge || {})),
+      } : null,
+      shops: state.shops ? JSON.parse(JSON.stringify(state.shops)) : {},
+      wormholes: state.mode !== "campaign" ? captureWormholes() : [],
+      connections: Array.isArray(state.worldState?.connections)
+        ? JSON.parse(JSON.stringify(state.worldState.connections))
+        : [],
+      ...(instance ? { instance } : {}),
     };
     request.answered = true;
   });
   for (const ev of [
-    "docked", "launched", "pickup", "mined", "enemy-killed",
+    "docked", "launched", "place-changed", "pickup", "mined", "enemy-killed",
     "mission-progress", "mission-objectives-done", "mission-accepted",
     "mission-failed", "mission-step-reset", "mission-rewarded", "mission-abandoned",
   ]) {
@@ -649,6 +1000,18 @@ function installMultiplayerVisitors() {
         guestId: P.guestId,
         notice: ev === "mission-failed" && payload.reason !== "abandon" ? (payload.message || "") : "",
       });
+    });
+  }
+  on("mp-place-notice", ({ guestId, text } = {}) => {
+    if (!guestId || !text) return;
+    emit("mp-guest-visit-push", { guestId, notice: text });
+  });
+  for (const ev of ["instance-objective-done", "instance-warning", "instance-cache-moved", "instance-cache-empty"]) {
+    on(ev, ({ id } = {}) => {
+      if (!id) return;
+      for (const g of guestPlayers()) {
+        if (g && g.place === id) emit("mp-guest-visit-push", { guestId: g.guestId });
+      }
     });
   }
   on("mp-guest-recovered", (payload = {}) => {
@@ -670,6 +1033,7 @@ function installMultiplayerVisitors() {
     if (!P?.profile) return;
     request.profile = guestProfileSnapshot(P);
     request.lockers = guestLockerSnapshot(P);
+    request.visitState = guestVisitStateSnapshot(P);
     request.answered = true;
   });
 }
@@ -699,8 +1063,15 @@ refreshGuns();   // and the primary bays decide what fires on left click
 // Browsers only allow sound after a user gesture. The start button used to be
 // the only thing that started it, so a save that resumes out in space (start
 // screen skipped) was silent forever. Any click or key now starts/resumes it.
+let hasUserGesture = false;
+const noteUserGesture = () => {
+  hasUserGesture = true;
+  if (isNetOn() && hostKeepaliveOn) startHostAudioKeepalive();
+};
 addEventListener("pointerdown", () => initAudio(), { passive: true });
 addEventListener("keydown", () => initAudio());
+addEventListener("pointerdown", noteUserGesture, { passive: true });
+addEventListener("keydown", noteUserGesture);
 
 installMultiplayerVisitors();
 installMultiplayerShips();
@@ -714,7 +1085,10 @@ resumeFromSave();   // prepares the ship; the start screen still owns the panel
 // and closing the tab. `pagehide` and the hidden-tab event are the ones browsers
 // actually deliver on close; the timer bounds what a crash can lose.
 const saveResumePoint = () => {
-  if (!state.ui.intro && !state.away) saveCurrentGame();
+  if (!state.ui.intro && !state.away) {
+    try { emit("mp-host-flush", {}); } catch (e) {}
+    saveCurrentGame();
+  }
 };
 addEventListener("pagehide", saveResumePoint);
 document.addEventListener("visibilitychange", () => {
@@ -763,7 +1137,10 @@ showPlace(state.place);
 // --- Actions (key and mouse bindings, see core/input.js) -------------------
 on("navigation-select", object => {
   const P = localPlayer();
-  if (P && state.ui.navigation && !state.paused && !P.docked && !state.warp) selectPocketObject(object, P);
+  if (P && state.ui.navigation && !state.paused && !P.docked && !state.warp) {
+    selectPocketObject(object, P);
+    if (isGuestVisiting()) sendGuestLock(P.flight?.lock || null);
+  }
 });
 
 on("action", ({ name, repeat, to: nameTo, key }) => {
@@ -780,6 +1157,7 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
         state.aimOrigin = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
         Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
         toggleLock(localPlayer(), pickLockSurface(scene, camera));
+        if (isGuestVisiting()) sendGuestLock(localPlayer().flight?.lock || null);
       }
       break;
     case "primary:1": case "primary:2": case "primary:3": case "primary:4": case "primary:5":
@@ -813,13 +1191,13 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       // within range, or out through the instance's own way out. Never by contact. Beside a run's
       // canister the same press opens the trade (ui/cache.js), and pressing it again puts it away:
       // the pilot's hands are on the cargo, so R stays the canister's key until they are done.
-      // Slice 8c: a guest's rift is not simulated locally — the host owns rifts/wormholes.
-      // Pressing R while visiting does nothing (does not affect host either).
-      if (isGuestVisiting()) break;
       if (repeat) break;
       if (isFailureNoticeOpen()) { dismissFailureNotice(); break; }
       if (isCacheOpen()) closeCache();
-      else if (playing && !state.warp) riftAction(localPlayer());
+      else if (playing && !state.warp) {
+        if (isGuestVisiting()) requestGuestAction({ op: "rift" });
+        else riftAction(localPlayer());
+      }
       break;
     case "starmap":
       if (!repeat) {
@@ -839,7 +1217,10 @@ on("action", ({ name, repeat, to: nameTo, key }) => {
       break;
     }
     case "route:jump":
-      if (!repeat && playing) jumpRoute(localPlayer());
+      if (!repeat && playing) {
+        if (isGuestVisiting()) jumpRoute(localPlayer(), (_, to) => netRequestWarp(to));
+        else jumpRoute(localPlayer());
+      }
       break;
     case "travel":
       // The map only proposes a destination. The sim rechecks the direct link,
@@ -923,12 +1304,23 @@ const simClock = createSimClock(undefined, {
 
 // When this browser is hosting, the world must keep running even if the tab is
 // hidden or minimised — otherwise the guest sees a freeze. `requestAnimationFrame`
-// stalls in a hidden tab, so a worker (not throttled) drives the same clock
-// from wall time. It is cheap: one tick per SIM_DT (~60 Hz) and only while a
-// session is on. Fallback to setInterval if workers are blocked.
+// stalls in a hidden tab, and main-thread `setInterval` throttles to 1 Hz (1 fps).
+// On `file://`, `new Worker(blobUrl)` can also throw `SecurityError`, falling back
+// to that throttled `setInterval`. Furthermore, when the host opens the Pause menu
+// (`setAudioSuspended(true)`), suspending the main game AudioContext drops Chromium's
+// audible-tab throttling exemption if our keepalive node outputs 0.0 silence. So
+// alongside `Worker` (blob: then data:), we run an unthrottled WebAudio hardware
+// heartbeat emitting an inaudible 12 Hz (-57 dBFS) sub-sonic carrier so Chromium
+// keeps the host tab unthrottled even while paused or muted on `file://`.
 let hostTick = null;
 let hostWorker = null;
 let hostTickAt = 0;
+let hostAudioCtx = null;
+let hostAudioNode = null;
+let hostAudioGain = null;
+let hostAudioBusy = false;
+let hostKeepaliveOn = false;
+let mpRole = "";
 function advanceHostClock() {
   if (!isNetOn() || isSimulationPaused()) return;
   const now = performance.now();
@@ -953,46 +1345,163 @@ function advanceHostClock() {
   try { emit("host-keepalive-tick", {}); } catch (e) {}
 }
 let hostWorkerUrl = null;
-function startHostTick() {
-  if (hostTick || hostWorker) return;
-  hostTickAt = performance.now();
+function armIntervalFallback() {
+  if (hostTick || hostWorker || hostAudioNode) return;
+  hostTick = setInterval(advanceHostClock, Math.round(SIM_DT * 1000));
+  if (typeof hostTick?.unref === "function") hostTick.unref();
+}
+function startHostWorker() {
+  if (hostWorker || typeof Worker !== "function") return false;
+  const workerSrc = "setInterval(()=>postMessage('tick'),16)";
+  const tryStart = (url, revokeOnStop) => {
+    try {
+      const w = new Worker(url);
+      w.onmessage = advanceHostClock;
+      w.onerror = () => {
+        try { w.terminate(); } catch (e) {}
+        if (hostWorker === w) hostWorker = null;
+        if (revokeOnStop && hostWorkerUrl === url) {
+          try { URL.revokeObjectURL(url); } catch (e) {}
+          hostWorkerUrl = null;
+        }
+        if (hostKeepaliveOn && revokeOnStop) {
+          const dataUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(workerSrc)}`;
+          if (!tryStart(dataUrl, false)) armIntervalFallback();
+        } else if (hostKeepaliveOn) {
+          armIntervalFallback();
+        }
+      };
+      hostWorker = w;
+      hostWorkerUrl = revokeOnStop ? url : null;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
   try {
-    const blob = new Blob(["setInterval(()=>postMessage('tick'),16)"], { type: "application/javascript" });
-    const url = URL.createObjectURL(blob);
-    hostWorkerUrl = url;
-    hostWorker = new Worker(url);
-    hostWorker.onmessage = advanceHostClock;
-    hostWorker.onerror = () => {
-      try { hostWorker.terminate(); } catch (e) {}
-      hostWorker = null;
-      if (hostWorkerUrl) { try { URL.revokeObjectURL(hostWorkerUrl); } catch (e) {} hostWorkerUrl = null; }
-      hostTick = setInterval(advanceHostClock, Math.round(SIM_DT * 1000));
-      if (typeof hostTick?.unref === "function") hostTick.unref();
+    if (typeof Blob === "function" && typeof URL?.createObjectURL === "function") {
+      const blob = new Blob([workerSrc], { type: "application/javascript" });
+      const blobUrl = URL.createObjectURL(blob);
+      if (tryStart(blobUrl, true)) return true;
+      try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+    }
+  } catch (e) {}
+  return tryStart(`data:text/javascript;charset=utf-8,${encodeURIComponent(workerSrc)}`, false);
+}
+function startHostAudioKeepalive() {
+  if (!hostKeepaliveOn || !hasUserGesture) return;
+  if (hostAudioCtx && hostAudioCtx.state === "suspended" && typeof hostAudioCtx.resume === "function") {
+    hostAudioCtx.resume().catch(() => {});
+  }
+  if (hostAudioNode || hostAudioBusy) return;
+  const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (typeof Ctx !== "function") return;
+  hostAudioBusy = true;
+  try {
+    const ctx = hostAudioCtx || new Ctx({ latencyHint: "interactive" });
+    hostAudioCtx = ctx;
+    if (ctx.state === "suspended" && typeof ctx.resume === "function") {
+      ctx.resume().catch(() => {});
+    }
+    const attachKeepaliveNode = node => {
+      if (!hostKeepaliveOn || hostAudioNode) {
+        try { node.disconnect?.(); } catch (e) {}
+        return;
+      }
+      const gain = ctx.createGain();
+      if (typeof gain.gain?.setValueAtTime === "function" && typeof gain.gain?.linearRampToValueAtTime === "function" && typeof ctx.currentTime === "number") {
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.05);
+      } else if (gain.gain) {
+        gain.gain.value = 1;
+      }
+      node.connect(gain);
+      gain.connect(ctx.destination);
+      hostAudioNode = node;
+      hostAudioGain = gain;
+      if (hostTick) { clearInterval(hostTick); hostTick = null; }
     };
+    const fallbackScriptProcessor = () => {
+      if (!hostKeepaliveOn || hostAudioNode || typeof ctx.createScriptProcessor !== "function") return;
+      try {
+        const sp = ctx.createScriptProcessor(1024, 1, 1);
+        let spPhase = 0;
+        sp.onaudioprocess = ev => {
+          const out = ev?.outputBuffer?.getChannelData?.(0);
+          if (out) {
+            for (let i = 0; i < out.length; i += 1) {
+              spPhase = (spPhase + 0.0015708) % 6.2831853;
+              out[i] = 0.002 * Math.sin(spPhase);
+            }
+          }
+          advanceHostClock();
+        };
+        attachKeepaliveNode(sp);
+      } catch (e) {}
+    };
+    const WorkletNode = globalThis.AudioWorkletNode;
+    if (ctx.audioWorklet && typeof ctx.audioWorklet.addModule === "function" && typeof WorkletNode === "function") {
+      const workletCode = "class K extends AudioWorkletProcessor{constructor(){super();this._n=0;this._p=0;}process(i,outputs){const out=outputs&&outputs[0]&&outputs[0][0];if(out){for(let k=0;k<out.length;k++){this._p=(this._p+0.0015708)%6.2831853;out[k]=0.002*Math.sin(this._p);}}if(++this._n>=6){this._n=0;this.port.postMessage(1);}return true;}}registerProcessor('tr-host-keepalive',K);";
+      const modUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(workletCode)}`;
+      ctx.audioWorklet.addModule(modUrl).then(() => {
+        hostAudioBusy = false;
+        if (!hostKeepaliveOn || hostAudioNode) return;
+        try {
+          const node = new WorkletNode(ctx, "tr-host-keepalive", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+          node.port.onmessage = advanceHostClock;
+          attachKeepaliveNode(node);
+        } catch (e) {
+          fallbackScriptProcessor();
+        }
+      }).catch(() => {
+        hostAudioBusy = false;
+        fallbackScriptProcessor();
+      });
+    } else {
+      hostAudioBusy = false;
+      fallbackScriptProcessor();
+    }
   } catch (e) {
-    hostTick = setInterval(advanceHostClock, Math.round(SIM_DT * 1000));
-    if (typeof hostTick?.unref === "function") hostTick.unref();
+    hostAudioBusy = false;
   }
 }
+function startHostTick() {
+  hostKeepaliveOn = true;
+  if (!hostTickAt) hostTickAt = performance.now();
+  else hostTickAt = Math.max(hostTickAt, performance.now() - SIM_DT * 1000);
+  startHostWorker();
+  startHostAudioKeepalive();
+  if (!hostWorker && !hostAudioNode) armIntervalFallback();
+}
 function stopHostTick() {
+  hostKeepaliveOn = false;
   if (hostWorker) { try { hostWorker.terminate(); } catch (e) {} hostWorker = null; }
   if (hostWorkerUrl) { try { URL.revokeObjectURL(hostWorkerUrl); } catch (e) {} hostWorkerUrl = null; }
   if (hostTick) { clearInterval(hostTick); hostTick = null; }
+  if (hostAudioNode) {
+    try { hostAudioNode.onaudioprocess = null; } catch (e) {}
+    try { if (hostAudioNode.port) hostAudioNode.port.onmessage = null; } catch (e) {}
+    try { hostAudioNode.disconnect(); } catch (e) {}
+    hostAudioNode = null;
+  }
+  if (hostAudioGain) { try { hostAudioGain.disconnect(); } catch (e) {} hostAudioGain = null; }
+  if (hostAudioCtx) {
+    try { hostAudioCtx.close?.().catch?.(() => {}); } catch (e) {}
+    hostAudioCtx = null;
+  }
+  hostAudioBusy = false;
 }
 on("mp-state", snap => {
   state.multiplayer = !!(snap?.on);
-  if (snap?.on) startHostTick();
+  mpRole = snap?.role || "";
+  if (snap?.on && mpRole === "host") startHostTick();
   else stopHostTick();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden" && isNetOn()) startHostTick();
+  if (document.visibilityState === "hidden" && isNetOn() && mpRole === "host") startHostTick();
 });
 // Blur also stalls rAF on some window managers (clicking to second monitor).
-addEventListener("blur", () => { if (isNetOn()) startHostTick(); });
-addEventListener("focus", () => {
-  // Let rAF take over again; keep tick for a moment to avoid gap on focus switch.
-  setTimeout(() => { if (!document.hidden && hostTickAt && performance.now() - lastFrameAt < 200) stopHostTick(); }, 500);
-});
+addEventListener("blur", () => { if (isNetOn() && mpRole === "host") startHostTick(); });
 
 /**
  * One frame. Split from `frame` below so that anything it throws can be caught without stopping the
@@ -1041,20 +1550,28 @@ function drawFrame(now) {
     Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
   }
   simClock.advance(dt);
-  // Guest's own ship and visited-pocket entities use buffered snapshot interpolation (35 ms / 50 ms)
-  // so high-refresh screens move smoothly instead of jittering at 24 Hz against 60 Hz prevPoses.
+  const sampleAt = hrNow(now);
+  // Guest's own ship and visited-pocket entities use buffered snapshot interpolation (`SHIP_STREAM.delayMs` = 100 ms)
+  // with arrival dejittering so high-refresh displays (e.g. 240 Hz) move smoothly instead of stalling between packets.
   if (isGuestVisiting()) {
-    const nowMs = Date.now();
-    const selfPoses = guestSelfStream.sample(nowMs);
+    for (const inst of state.instances.values()) {
+      if (inst && !inst.gone && inst.lifetime > 0) inst.lifetime = Math.max(0, inst.lifetime - dt);
+    }
+    for (const wh of state.wormholes.values()) {
+      if (wh && !wh.doomed && wh.lifetime > 0) wh.lifetime = Math.max(0, wh.lifetime - dt);
+    }
+    const selfPoses = guestSelfStream.sample(sampleAt);
     if (selfPoses.length) applySelfShip(selfPoses[0]);
-    const snap = entityStream.samplePlace(state.place, nowMs);
+    const gP = localPlayer();
+    if (gP) gP.bs = (gP.bs || 0) + ((gP.boost ? 1 : 0) - (gP.bs || 0)) * Math.min(1, dt * 8);
+    const snap = entityStream.samplePlace(state.place, sampleAt);
     if (snap) syncPocketEntities(placeWorld(state.place), snap, state.place);
   }
   const alpha = simClock.alpha();
   updateEnemyViews(alpha);    // interpolate each hostile's mesh between 60 Hz ticks
   // Slice 8a: every other pilot. A host draws its visiting records straight from `state.players`
   // (no wire at all); a guest draws what the host sent, `SHIP_STREAM.delayMs` in the past.
-  updateEntityViews(alpha, shipStream.sample());   // and every bullet, missile, crate, particle, rock and the ship
+  updateEntityViews(alpha, shipStream.sample(sampleAt));   // and every bullet, missile, crate, particle, rock and the ship
   updateWarpStreaks(dt);      // all three hide themselves when no warp is running
   updateWarpFlash();
 

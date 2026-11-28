@@ -28,8 +28,9 @@ export function loadPlace(id) {
     return container;
   }
   for (const feature of placeDef(id).features) {
-    if (feature.kind === "asteroidField") populateField(id, feature);
-    else if (feature.kind === "encounter") spawnStaticEncounter(id, feature);
+    if (feature.kind === "asteroidField") {
+      if (!container.entities.asteroids.some(r => r?._net)) populateField(id, feature);
+    } else if (feature.kind === "encounter") spawnStaticEncounter(id, feature);
     // station / planet / spawner features are read by the systems that use them;
     // scenery is built by render/ from the same definition on place-entered.
   }
@@ -83,7 +84,7 @@ export function enterPlace(id, player = state.player) {
   }
   const local = player === state.player;
   // An instance belongs to no system, so there is no system visit to record for it.
-  if (local && !instance) recordSystemVisit(state.galaxy, state.worldState.galaxy?.knowledge, id);
+  if (!instance && (local || player?.guestId)) recordSystemVisit(state.galaxy, state.worldState.galaxy?.knowledge, id);
   if ((player ? player.place : state.place) === id) {
     if (player?.guestWorld) player.guestWorld.place = id;
     if (local) state.place = id;

@@ -179,6 +179,7 @@ export function createChannel({ role = "host", worldId, onState, onData, onPeer,
         const config = { appId: ROOM_NAMESPACE };
         if (Array.isArray(RELAYS.relayUrls) && RELAYS.relayUrls.length) {
           config.relayConfig = { urls: RELAYS.relayUrls.slice() };
+          config.relayConfig.warnOnRelayFailure = false;
         }
         // The owner's escape hatch for two networks that cannot see each other: a TURN
         // server in `data/multiplayer.js`. Unset, the library's public STUN is enough for

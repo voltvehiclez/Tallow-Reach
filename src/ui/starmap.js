@@ -559,6 +559,7 @@ export function setupStarmap() {
   // chart is open would only appear after the player clicked something.
   on("mp-guest-arrived", () => { if (state.ui.starmap) render(); });
   on("mp-guest-left", () => { if (state.ui.starmap) render(); });
+  on("mp-visit", () => { if (state.ui.starmap) render(); });
   on("place-changed", ({ from, to, player } = {}) => {
     if (player && player !== localPlayer()) return;
     const before = state.galaxy?.pocketsById?.[from]?.parent;

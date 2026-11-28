@@ -18,6 +18,78 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-27: Guest-vs-local feature parity — F/N/missile locks, route jump, rifts/instances/caches, wormholes, galaxy/shops & destination sync (build `2026-11-27h`)
+
+**Code change; rebuild needed; build `2026-11-27h`.** Save version unchanged (**29**); additive optional fields on `entities` (`rifts`, `gates`, `caches`), `visit` (`openCacheId`, `galaxy`, `shops`, `wormholes`, `connections`, `instance`), and `ACT_OPS` (`"lock"`, `"rift"`, `"cacheClose"`).
+
+Closed every gameplay parity gap between visiting guests and local/host pilots:
+
+1. **Targeting, N-list & missile parity (`src/sim/{targeting,missile,weapons,guest-actions}.js`, `src/main.js`):** Guest `KeyF` / `KeyN` selections forward `{ op: "lock", kind, id }` to the host so host-side missiles (`updateMissiles`) follow guest target locks, and `otherPilotsThere`/`targetHealth`/`updateMissileFlight` treat live host/guest pilots identically while blocking missile locks on docked pilots.
+2. **Rifts, dynamic instances, shared `CACHE` trades, wormholes & uncharted links (`src/sim/{instances,wormholes,uncharted,inventory,guest-actions,world,places}.js`, `src/net/{protocol,session}.js`, `src/render/entitystream.js`, `src/ui/{cache,cargo,hud}.js`, `src/main.js`):** Synced `rifts`/`gates`/`caches` via `mp-entities`, `visit.instance` (`syncGuestInstance` with multi-pilot `entries`, isolated exit/death extraction, cache `slots` + `tradeOpen`, and live HUD countdown interpolation), wormhole occupancy guards (`pocketOccupied`), and `uncharted` `pocketsById` expiry cleanup. Fixed two `guest-actions.js` bugs caught by integration testing (`cache?.stock` vs `cache?.loot` string, and `invMove` measuring moved quantity instead of string `moveItem > 0`). Routed guest `KeyR`, cache close/use/discard, and cargo consumable confirmation (`pendingUse`) over `act`/`visit`, and gated `"instance-cache-open"`/`"docked"`/`"rift-left"` events by `payload?.player`.
+3. **Galaxy, shops, starmap destination & travel notices (`src/sim/{galaxy-session,navigation,sectors,session}.js`, `src/state/destination.js`, `src/ui/starmap.js`, `src/main.js`):** Synced host `galaxy` (`seed`/`knowledge`), `shops`, `wormholes`, and `connections` cleanly across `visit` (bucketing `visitPrintOf` lifetimes so idle countdowns do not spam `visit` packets) with full home stash/restore on leaving; deferred dynamic instance `pendingNetPlace` transitions until `syncGuestInstance` registers the place; routed `KeyJ` (`jumpRoute` `warpFn`) and `"travel-denied"` notices to guests; guarded `setDestination` against overwriting the home save while away; and emitted `"place-changed"` on guest transitions so `starmap` clears reached destinations automatically.
+
+**Tests:** Added `tests/multiplayer-parity.test.mjs` (**6** suites including a two-VM real-`src/main.js` end-to-end test); **Playtest confirmed (2026-11-28):** owner passed Slice 8c + full guest parity (`2026-11-27h`), guide moved to `testing/passed/TESTING-16-SLICE8C.md`, ticked in `docs/ROADMAP.md`; **Docs:** Updated `docs/HANDOFF.md`, `docs/LESSONS.md` (`L58`; archived `L46`–`L47`), and `docs/architecture/multiplayer.md`.
+
+## 2026-11-27: Fix paused-tab 1 Hz host throttling & 24 Hz cannon bolt snapping (build `2026-11-27g`)
+
+**Code change; rebuild needed; build `2026-11-27g`.** Save version unchanged (**29**); wire schema and `SHIP_STREAM` (`24 Hz` / `100 ms`) unchanged.
+
+Fixed two follow-up issues from the `2026-11-27f` multiplayer playtest:
+
+1. **Paused background host 1 Hz stall (`src/main.js`).** Opening the Pause menu calls `setAudioSuspended(true)` on the main game `AudioContext`, while `hostAudioCtx` previously wrote all-zero silence through `gain = 0`. Without active non-zero audio, Chromium dropped the tab's audible exemption and throttled background timers to `1 Hz` whenever the host switched tabs with Pause open. `startHostAudioKeepalive()` now generates a sub-audible `12 Hz` (`0.002` / `-57 dBFS`) sine carrier in both `AudioWorkletNode` and `ScriptProcessorNode` (ramped `0 -> 1` over `50 ms`, resumed automatically on `visibilitychange`/gesture), keeping background host tabs unthrottled while paused or muted on both `https://` and `file://`.
+2. **Cannon shot 24 Hz stepping & stream lockstep (`src/main.js`, `src/net/session.js`).** Cannon bolts (`900 m/s` + up to `300 m/s` ship speed) move `44–65 m` per `42 ms` snapshot, tripping `entityStream`'s `snapM: 50` teleport cutoff every frame and preventing interpolation. Raised `entityStream` `snapM` to `300` (and `guestSelfStream` `snapM` to `80`), and piggybacked `startEntityStream()` onto `shipTick` (`entityTick = -1`) so ship poses and spawned projectiles emit from the same `24 Hz` host tick.
+
+**Tests:** Added fast cannon-bolt interpolation test in `tests/multiplayer-8c-fixes.test.mjs` and sub-audible keepalive / `snapM: 300` assertions in `tests/multiplayer-playtest-20261127.test.mjs`; `npm test` **1170/1170**, build **3671 KB**. **Docs:** Archived `2026-11-25` Playtest 24 entry, added `L57` in `docs/LESSONS.md`, and updated `docs/HANDOFF.md` and `docs/architecture/multiplayer.md`.
+
+## 2026-11-27: Pre-8d 240 Hz guest jitter & turn smoothing (build `2026-11-27f`)
+
+**Code change; rebuild needed; build `2026-11-27f`.** Save version unchanged (**29**); wire schema and `SHIP_STREAM` (`24 Hz` / `100 ms`) unchanged.
+
+Eliminated guest-side 240 Hz stutter, packet-jitter surging, and high-speed turning shake before Slice 8d prediction:
+
+1. **Snapshot buffer depth & sub-ms clock alignment (`src/main.js`, `src/net/session.js`).** Raised `guestSelfStream` (`35 ms` -> `SHIP_STREAM.delayMs` `100 ms`) and `entityStream` (`50 ms` -> `SHIP_STREAM.delayMs` `100 ms`) past `2.4x` the 24 Hz send interval so high-refresh frames never run dry into 24 Hz hold-frames, and aligned `onShips`, `onEntities`, `mp-refresh-visit`, and `drawFrame` onto `hrNow` (`performance.timeOrigin + performance.now()` / `rAF` timestamp, `Date.now()` fallback in headless VMs) to avoid `Date.now()` ms quantization beats.
+2. **Arrival-jitter pacing (`src/render/{shipstream,entitystream}.js`, `src/main.js`).** Added opt-in `paceMs: 1000 / SHIP_STREAM.hz` (`~41.67 ms`) cadence dejittering on `shipStream`, `guestSelfStream`, and `entityStream` so uneven WebRTC arrival gaps stay near steady 24 Hz spacing (with `-0.25` step-rounding bias so `+25 ms` late packets do not miscount steps, plus `rawAt + 8` cap and fast pass-through on immediate dock/launch packets).
+3. **Tangent-preserving turn curves & visual polish (`src/render/shipstream.js`, `src/main.js`).** Added tangent-checked Cubic Hermite position blending (`interpPos`) across curved high-speed turns (falling back to linear lerp on zero-velocity or mismatched stubs), smoothly interpolated `warpFx`, `warpFlash`, and `shake`, and damped guest `gP.bs` boost FOV/glow per frame (`dt * 8`) instead of stepping on snapshots.
+
+**Tests:** Added `paceMs` + Cubic Hermite curve test in `tests/multiplayer-weapons.test.mjs`, `entityStream` `paceMs` test in `tests/multiplayer-8c-fixes.test.mjs`, and stream/boost/hunt coverage in `tests/multiplayer-playtest-20261127.test.mjs`; `npm test` **1170/1170**, build **3670 KB**. **Docs:** Updated `docs/HANDOFF.md` and `docs/architecture/multiplayer.md`.
+
+## 2026-11-27: Fix host keepalive, guest Launch/HUD/beam/rock parity, pocket collisions, and view/cubemap bugs (build `2026-11-27e`)
+
+**Code change; rebuild needed; build `2026-11-27e`.** Save version unchanged (**29**). Wire adds five optional/cleaned fields to `SHIP_FIELDS` (`beamT`, `pwr`, `pwrDraw`, `enFrac`, `hint`) and optional `rocks` diff packets (`LIMITS.rocks = 256`) on `entities`.
+
+Fixed four post-playtest bug clusters found on `2026-11-27d`:
+
+1. **Views & WebGL console errors (`src/render/{views,cubemap}.js`, `src/data/multiplayer.js`, `src/net/transport.js`).** Keyed `views.js` `drawn` map by `${kind}:${id}` instead of `${group}:${id}` (eliminating rock/bullet/crate numeric ID collisions that turned Ferrite rocks into firing bolts), guarded `orientFace` `texture.needsUpdate = true` on `texture.image`, pruned dead/noisy relays to 10 curated `RELAYS.relayUrls`, and set `relayConfig.warnOnRelayFailure = false`.
+2. **Host background keepalive (`src/main.js`, `src/net/session.js`).** Added `data:` Worker fallback after `blob:` Worker errors (`file://` `SecurityError`) and a gesture-unlocked, zero-gain WebAudio `AudioWorkletNode` / `ScriptProcessorNode` heartbeat (paused/stopped cleanly when not hosting), plus tightened `host-keepalive-tick` throttle to `Math.round(1000 / SHIP_STREAM.hz) - 4`.
+3. **Guest Launch/power/warp parity & remote-pocket collision (`src/main.js`, `src/sim/player.js`).** Skipped stale pre-transition `applySelfShip` `docked` frames during `dockStreamCaughtUp === false` (with 1.5 s safety guard) so launching guests never freeze or snap to `[0,0,0]`, preserved non-docked `power`/`en` across `applyVisitSnapshot` `refillPower`, stored `P.warp.from` for guest Warp arrival notices alongside Launch notices, and switched `flight()` collisions in `src/sim/player.js` from `state.world` to `placeWorld(P.place || state.place)`.
+4. **Mining beam, HUD bars/prompts, and rock sync (`src/data/multiplayer.js`, `src/net/{ships,protocol,session}.js`, `src/state/state.js`, `src/sim/{step,weapons,combat,sectors,places,world}.js`, `src/render/{shipstream,entitystream}.js`, `src/ui/hud.js`, `src/main.js`).** Synced `beamT`/`pwr`/`pwrDraw`/`enFrac`/`hint` with interpolation, routed non-local transient hints via `sayForPlayer` (expired in `step.js`), matched `hud.js` `#bm` against `primarySlotIndex(S.pw, P)`, diffed/throttled `rocks` in `mp-entities`, synced in-place scaling/depletion via `syncPocketRocks` (guarded `loadPlace` against double-spawn), and updated `clearNetEntities` to purge `_net` rocks and reset `container.loaded = false`.
+
+**Tests:** Updated `tests/{skybox,views,multiplayer-weapons,multiplayer-playtest-20261127}.test.mjs` with unit and two-VM real `src/main.js` integration coverage. **Docs:** Updated `docs/HANDOFF.md`, `docs/LESSONS.md` (`L55`–`L56`, archived `L35`–`L36`), and `docs/architecture/multiplayer.md`.
+
+## 2026-11-27: Fix guest `G` docking and undocked relog HUD/reticle (build `2026-11-27d`)
+
+**Code change; rebuild needed; build `2026-11-27d`.** Save version unchanged (**29**); no save or wire schema changes.
+
+Fixed two live-playtest integration bugs found in `2026-11-27c`:
+
+1. **Guest `G` docking (`src/main.js`).** Imported missing `cancelGuestHeld` from `./sim/multiplayer.js` (previously throwing `ReferenceError` inside `mp-guest-dock`'s `try/catch` and sending an empty notice back to the guest), and added `console.error` + guarded `reportCrash` logging in `mp-guest-dock`, `mp-guest-warp`, `applyVisitSnapshot`, and `restoreGuestHome` so no net-side failure fails silently.
+2. **Undocked guest relog HUD and reticle (`src/ui/menu.js`, `src/ui/hud.js`, `src/util/events.js`, `src/main.js`).** `enterGameMode("open")` now emits `"open-world-entered"` after clearing `state.ui.intro`, and `ui/hud.js` attaches `syncWorldHud` to `"open-world-entered"` and `"mp-refresh-visit"` (clearing route/weapon-slot caches and calling `setReticle(Boolean(state.player && !state.player.docked))`). Also fixed `mp-refresh-visit` in `src/main.js` to pass `latestSelf[0]` instead of the `Pose[]` array to `applySelfShip`.
+
+**Tests:** Extended `tests/multiplayer-playtest-20261127.test.mjs` with an esbuild whole-bundle undeclared-call guard (`src/main.js`) and a two-VM real `src/main.js` end-to-end playtest covering `KeyG` docking (`cancelGuestHeld` + `docked` + HUD/panel sync), contract accept/progress/hand-in, abrupt disconnect, and undocked relog HUD/reticle recovery. **Docs:** Updated `docs/HANDOFF.md`, `docs/LESSONS.md` (`L54`; moved `L42`–`L44` to `docs/archive/MULTIPLAYER_SLICE4_5_LESSONS.md`), `docs/architecture/multiplayer.md`, and `src/ui/README.md`.
+
+## 2026-11-27: Post-8c live playtest fixes (build `2026-11-27c`) — guest HUD speed, docking, per-host `visitState` persistence, and UI resume guard
+
+**Code change; rebuild needed; build `2026-11-27c` (`npm run build` 3660 KB).** Save version unchanged (**29**; additive `visitState` field on `world.guests[guestId]` listed in `GUEST_FIELDS`).
+
+Fixed four bugs caught in live two-browser playtesting after `2026-11-27b`:
+
+1. **Guest HUD speed matches live velocity (`src/sim/flight-instruments.js`, `src/main.js`).** Exported `syncSpeedFromVelocity(player, warping)` and invoked it inside `applySelfShip` (zeroing velocity/throttle when docked) so guest `P.measuredSpeed` and `P.forwardSpeed` track forward/reverse flight, boost, and warp instead of staying stuck at `0 m/s`.
+2. **Reliable guest docking over both Trystero and paste-code links (`src/net/session.js`, `src/sim/session.js`, `src/main.js`).** Removed the 250 ms `withinDockGrace` timer that reverted guest docking on stale `ships` snapshots; `applySelfShip` and `applyVisitSnapshot` now synchronize `docked` deterministically via `lastVisitDockState` and `dockStreamCaughtUp`. Added `resolveGuestEntry(peerId)` and `hostPeerId || null` targeting so paste-code sessions (`peerId === null`) deliver `controls`/`warp`/`dock`/`act`, and exported `dockFailureReason` + `"docking-denied"` push feedback when pressing dock above `DOCK_MAX_SPEED` (broadcasting `ships` immediately on `dockTransition`).
+3. **Per-host-world guest progress persists across relogs without custody leak (`src/data/multiplayer.js`, `src/state/{profile,state}.js`, `src/net/{custody,multiplayer,session}.js`, `src/sim/{guest-actions,multiplayer,session}.js`, `src/main.js`).** Added `cleanVisitState`/`buildGuestVisitState` on `world.guests[guestId].visitState`, restored cleanly by `hostProfile(bundle, visitState)` + `arriveGuest()` + `applyResumePlacement()`. `syncGuests` / `saveGuestVisitState` / `captureActiveModeSave` quietly persist host-scoped missions, flags, counters, `homeStation`, pocket, flight `resume` pose/shield/boost, boards, drops, and `stationSlots` without bumping suitcase `rev`, while `forgetPeer` (`sendWire: false`), `stop()`, and `mp-host-flush` flush before disconnect/save and `saveKit.write` commits to `saveAutosave` (gating 30 Hz `markGuestSeen` with `{ persist: false }`). Also fixed `onCarry` to stamp `lastSent` so unchanged guests avoid an immediate redundant `rev` bump.
+4. **Menu resume guard (`src/ui/menu.js`).** `enterGameMode("open")` preserves `state.away` visits via `mp-refresh-home` / `mp-refresh-visit` instead of running `resumeFromSave()`, stopping docked home coordinates from clobbering airborne guest visits.
+
+**Tests:** Updated `tests/multiplayer-custody.test.mjs` (`GUEST_FIELDS` `"visitState"`) and added `tests/multiplayer-playtest-20261127.test.mjs` (**5** suites); `npm test` **1160/1160** passing. **Docs:** Updated `docs/architecture/multiplayer.md` (archived Playtest 23/24 notes to `docs/archive/MULTIPLAYER_PLAYTEST_23_24_NOTES.md`), `docs/HANDOFF.md`, and `docs/LESSONS.md` (`L52`–`L53`).
+
 ## 2026-11-27: Guest ship, station, inventory/fitting, and mission sync + owner isolation (build `2026-11-27b`)
 
 **Code change; rebuild needed; build `2026-11-27b`.** Save version unchanged (**29**). Wire adds two allowlisted/capped kinds (`act` guest→host and `visit` host→guest) plus optional mission/owner metadata on `entities` (`enemies`/`crates`).
@@ -74,186 +146,12 @@ The guest still ran its own world in 8b — its own sim stepped its own scenery 
 - **Docs & guide:** new [testing/TESTING-16-SLICE8C.md](../testing/TESTING-16-SLICE8C.md) linked from [testing/README.md](../testing/README.md) (cut on host warp, free warp/dock, Go home, what you still won't see — enemies/bullets still host-only). Updated module READMEs and [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Tests:** `tests/docs.test.mjs` still green (HANDOFF 16-KB, ROADMAP 35-KB limits); `tests/multiplayer-connection.test.mjs` updated for the two new kinds; `npm test` green; `npm run build` 3604 KB.
 
-## 2026-11-25: Playtest 25 — one pointer at a time, and a lead pip for anything you can lock
-
-**Code change; rebuild needed; build `2026-11-25i`.** Save version unchanged (**29**); nothing saved
-and nothing on the wire changed.
-
-The owner confirmed all three playtest-24 fixes ("1. Works. 2. Works. 3. Works.") and sent two new
-reports from the same flight. Neither is a slice-8b feature; both are rules that were only ever
-written down in one place.
-
-- **1. "Pinning chat makes it so that when your orange circle cursor goes over the pinned chat your
-  white windows cursor is visible."** Two pointers live on the same screen: the system cursor and the
-  HUD's own orange circle (`#cur`). Only `canvas` hid the system one, so any element that took the
-  mouse — the pinned chat box does, `pointer-events: auto` — put a white arrow inside the ring. The
-  owner's rule is general: *"In the ship UI your orange circle cursor should always be prioritised if
-  you are steering. So UIs [that] decouple the steering like chat, inventory etc it's ok there to show
-  the white windows cursor."* So the answer is one body class, `pilot-pointer`, owned by the new
-  `src/ui/pointer.js`: **is the stick live?** — in a ship, not docked, not the title screen, not
-  paused, no surface holding the flight keys (chat, cargo, cache, chart, multiplayer screen, N list,
-  an act's end card). `main.js` asks it once a frame (`syncPointer()`, one comparison, a `classList`
-  write only when the answer changes) and `styles.css` finishes both halves: `body.pilot-pointer * {
-  cursor: none !important }` and `body:not(.pilot-pointer) #cur { display: none }` — so a pilot never
-  sees two pointers at once, in either direction. **Free camera (Left Alt) is not a decoupling** and
-  keeps the ring, per the owner: *"i still want the orange cursor like now since we are still flying
-  the ship just from a different view point."*
-- **2. "Lead indicator is not visible when I select a guest as a host with f."** The ballistic pip
-  was hard-wired to `lock.k === 'e'` — hostiles only — although playtest 23 made every pilot
-  selectable, so a locked friend drew nothing. It now follows **whatever F has locked, as long as it
-  is moving**: hostiles, visiting pilots on either machine, anything with a velocity. A pilot's lock
-  reference had no velocity at all, so `render/views.js` now carries one (`ref.v`): the host's
-  record's own interpolated `v`, or the `velocity` the host already sends in `SHIP_FIELDS` and
-  `render/shipstream.js` already smooths. Two gates stay, both about the shot: a wreck is skipped
-  (`hp <= 0`), and a target under `LEAD_MIN_SPEED` (0.5 m/s) has nothing to lead — a rock, a crate at
-  rest, a station and a rift door keep the screen quiet. The **weapon** side is unchanged, at the
-  owner's word (*"make the lead indicator currently only be for primary weapon, it's easier that way
-  right now"*): the selected primary bay's gun leads; an empty bay or the hitscan mining beam does
-  not, and the missile launcher is not consulted yet.
-- **3. "When chat is open the white cursor is only visible over the chat box."** The canvas hides the
-  system cursor for mouse-look flight, so a surface that took the stick only got the arrow back on its
-  own elements — everywhere else it was still `none`. The rule now gives the cursor the **whole
-  screen** on any decoupled surface (`body:not(.pilot-pointer) canvas { cursor: default }`, a type
-  selector with no `!important`, so a canvas with its own cursor keeps it), which is exactly what the
-  N list already did.
-- **4. "Are you sure that is the new build?"** The owner tested the previous round on a bundle that
-  contained neither fix, and nothing on the screen said which build was running. The chat box's empty
-  line now reads *Press Enter to chat. **Build 2026-11-25h*** — the one place both players always look
-  while flying. A screen without a build there is an old download or a cached page; hard-reload.
-- **Docs.** New guide [TESTING-25-POINTER-AND-LEAD.md](../testing/TESTING-25-POINTER-AND-LEAD.md)
-  (both reports, step by step). The rule itself is written into
-  [docs/architecture/ui-and-screens.md](architecture/ui-and-screens.md) and the two module READMEs.
-- **Tests.** `tests/playtest25-fixes.test.mjs` (8): the pointer table (including free camera and each
-  decoupling surface), the once-per-change DOM write, the two CSS rules, the frame loop's call, and
-  the lead pip — a pilot's reference carries a velocity on the host's screen and on a guest's, and
-  the instrument's gates (any lock, moving only, primary bay only). `npm test` **1131/1131**.
-
-## 2026-11-25: Playtest 24 — a repaired pilot comes back repaired, the visitor's hull stops blurring, and the chat can be copied
-
-**Code change; rebuild needed; build `2026-11-25f`.** Save version unchanged (**29**); one new field on
-one existing wire message, and no saved field at all.
-
-The owner's first flight of 8b reported three things. All of them are here, each with a test that fails
-on the old code.
-
-- **1. "Repair the pilot at home, bring it back, and it is still damaged"** — and the host said *"this
-  world kept its own"*. The repair really was in the suitcase; the world simply refused it. The ordering
-  pair (`epoch`, `rev`) cannot express "this copy came from home": a host raises `rev` on **every**
-  write-back, while a fresh `checkOut` starts every trip at `epoch 0, rev 0` — so the copy carrying the
-  repair is the one that looks older, and the damaged copy won. Slice 5's rule had been reading the
-  guest's own `left` mark instead, which conflated two different situations: *the pilot went home*
-  (believe the guest) and *the connection dropped* (believe this world — that rule is still pinned by
-  its own test). So a `carry` now says which it is: **`fresh: true`** means *packed out of the pilot's
-  own home save just now*, and only the guest can know it. `net/protocol.js` carries the flag;
-  `net/session.js` sets it in `sendCarry` (a new `checkOut`) and never on a rejoin of a stored suitcase,
-  and `onCarry` believes a fresh copy whatever the pair says. `left` is only about admission now.
-- **2. "The guest's hull and name tag go blurry on the host's screen, worse the faster it flies, only
-  while the host turns"** — the 2026-11-08 high-refresh sawtooth, back on the one record that fix never
-  reached. `snap` means "draw this frame un-interpolated", and only `chaseView` ever cleared it — for the
-  **local** hull. A visiting record keeps its `snap` from `launch()` for ever, so its hull was placed at
-  the last 60 Hz tick under a 240 Hz camera. `render/views.js` `poseOfRecord` now consumes the flag
-  after taking the pose, so the jump frame is still a jump and every frame after it interpolates like
-  the rest of the sky.
-- **3. "Opening chat with Enter should let me select and copy the text; selecting closes the box"** —
-  the field's `blur` handler closed an empty box, and a press on the lines blurs the field. Now a press
-  on the conversation starts a selection and keeps the box (and holds the redraws back, so a line that
-  arrives mid-drag cannot wipe the selection); a press on the field or **Pin** is typing; a press
-  anywhere else ends the selection and closes an empty, unpinned box exactly as before. Text is
-  selectable **only in the box opened with Enter** — `styles.css` gives the lines `user-select: none`
-  and turns it on under `body.mp-chat-open`, which is the owner's own line: not a glance, not a pinned
-  readout. Escape still closes it while a selection is up (the field no longer has the cursor, so the
-  box's own key handler would not see it).
-
-**Tests:** `tests/playtest24-fixes.test.mjs` (new, **5**): the repair surviving the round trip end to end
-(two real sessions, the host's own write-back, `bringPilotHome`, a repair, a rejoin — and the host's chat
-saying the pilot *arrived* rather than *kept its own*), the fresh flag reaching the wire with its pair at
-zero, a visitor's hull interpolating between ticks, a docked visitor untouched, and the chat press rule
-plus the stylesheet rule. `tests/multiplayer-slice5.test.mjs`'s "came home and came back" case now sends
-`fresh: true` — the same claim, said out loud. `npm test` **1122/1122**, build **3599 KB**.
-
-**What the owner must do:** hard-reload on **both** machines, check **Connection details** reads
-**`2026-11-25f`**, then follow `testing/TESTING-16-SLICE8B-FIXES.md`.
-
-## 2026-11-25: Step 16 slice 8b — the guest's controls reach its ship
-
-**Code change; rebuild needed; build `2026-11-25e`.** Save version unchanged (**29**); one new wire
-kind, one new state, no saved field.
-
-Slice 8a made a friend **visible**. This makes the friend **flyable**: the guest says what it is
-asking its ship to do, the host writes it into that visitor's own control record, and the host's sim —
-already the only writer of the truth — decides what it means.
-
-- **`controls` (`net/protocol.js`)** — a new kind carrying the control record plus the pilot's aim:
-  `{ steer{x,y}, roll, thrust, strafe, lift, stop, brake, boost, fire, sec, aim[x,y,z] }`
-  (`CONTROL_FIELDS` in `data/multiplayer.js`). Rebuilt field by field on send **and** read: every axis
-  clamped to -1..1, every held control only a real `true`, `aim` through the vec3 cleaner. A message
-  never names a pilot — **the peer is the identity** — so no guest can drive another's ship.
-- **`state.localInput` — the numbered decision, as planned.** `core/input.js` writes the local control
-  record today and `sim/` may not import `core/`; so 8b adds **one new state, one new writer**:
-  `state.localInput`, mirrored at the end of `syncControls()`, which the session reads. It is a copy,
-  not a reference, so a session can never write back into the pilot's own controls.
-- **The guest's clock** (`CONTROLS.hz` **30**, data) sends that asking 30 times a second — faster than
-  the 24 Hz snapshot stream on purpose, so a snapshot is never what a control waits behind. Nothing is
-  sent until a `welcome` is heard, and nothing at all once the session stops.
-- **`sim/multiplayer.js` `applyGuestControls(guestId, input)`** writes the asking into that visitor's
-  own `controls` (where `core/input.js` writes the local pilot's) and its `aimDirection` (its own
-  looking direction, so a guest's shot goes where the **guest** looks, not along the host's nose).
-  **A docked visitor launches the first time it asks to fly** — it has no other hull in this world —
-  through the same `launch()` the local pilot uses, so it leaves fully charged from the station's
-  launch point. An asking of nothing leaves a docked visitor parked.
-- **A silent guest does not fly on** (`ageGuestControls`, called each tick): after `CONTROLS.staleMs`
-  (**400 ms**, data) the record is asked for nothing, so a closed tab, a backgrounded window or a lost
-  channel cannot leave a hull holding its throttle into a rock. It stays launched; it coasts.
-- **Wiring:** `net/session.js` resolves the **peer** to a guest id and hands `{ guestId, input }` to
-  the bus (`mp-guest-controls`); `main.js` — the only place allowed to touch both — calls the sim.
-  A controls message from a peer that was never welcomed, or for a record that has gone, is dropped.
-
-**Not in 8b, by the plan:** prediction, acks and rewind (**8d**), cosmetic muzzle (now folded into the fundamental rule — no 8e, owner 2026-11-27), and the
-guest's screen following the host's pocket (**8c**) — a guest still sees its **own** galaxy, so this
-slice is watched from the **host's** screen. **A launched visitor cannot dock again yet** (docking is
-host-confirmed and a guest has no way to ask); it flies until it goes home.
-
-**Tests:** `tests/multiplayer-controls.test.mjs` (new, **11**): the kind and its fields, every axis
-clamped and every held control honest, `state.localInput` mirrored but never shared, the asking landing
-in the record and the hull actually flying under `stepSim`, an asking of nothing not launching, unknown
-and dead visitors driving nothing, aim normalised, silence neutralising after `staleMs`, the peer — not
-the message — deciding whose ship it is, and the guest's own send being cleaned and stopping with the
-session. `tests/multiplayer-connection.test.mjs`'s exhaustive `KINDS` list gained `controls`.
-`npm test` **1117/1117** (248 s), build **3598 KB** (`game/tallow-reach.html`, build string `2026-11-25e`).
-
-**What the owner must do:** hard-reload with Ctrl+Shift+R on **both** machines, check **Connection
-details** reads **`2026-11-25e`**, then follow `testing/TESTING-16-SLICE8B.md` — bring the pilot in,
-and watch the **host's** screen while the guest presses W: the friend's hull launches and flies.
-
-## 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
-
-**No code change; no rebuild needed — the build the owner passed is `2026-11-25d`.** Save version
-**29**, unchanged.
-
-*"Play test 8a passed."* That closes slice 8a, and with it the whole of step 16's **"one world, two
-ships"** half: host-authoritative ship snapshots at 24 Hz, a guest drawing every other pilot as a
-**view** (100 ms behind, interpolated, never guessed), the host drawing its visiting record with no
-wire at all, and the guest outside its own hull.
-
-What the passing round actually covers, because three fixes went in after the first playtest of it:
-
-- a friend's hull is **selectable** — **F** on the hull, or the **N** list's **Ship** filter, which
-  now carries **every** ship (NPC and player, docked included) — wearing **the pilot's own name** and
-  showing **hull/shield bars** like any other ship;
-- **leaving and rejoining the same link works**, including from a browser an older build had locked
-  out (the record that holds no secret cannot refuse anybody, and the host repairs it);
-- a visiting hull is **solid and takes damage** — collision, bolts, warheads, shields first — and its
-  destruction is said in words on both screens.
-
-Known and deliberate, carried into the remaining slices: a visitor **cannot fly** in the host's world
-(controls are **8b**), its screen does not follow the host's pocket (**8c**), and a destroyed visitor
-does not **respawn** (step 16's *death and recovery* debt). No save change anywhere in 8a.
-
-Merged to `main`. Next: **8b** (a guest's controls reach the host), then 8c, then **6** (trading —
-last, by the owner's order 2026-11-24). Guide: [../testing/TESTING-16-SLICE8A.md](../testing/TESTING-16-SLICE8A.md).
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-25: Playtest 25 — one pointer at a time, and a lead pip for anything you can lock
+- 2026-11-25: Playtest 24 — a repaired pilot comes back repaired, the visitor's hull stops blurring, and the chat can be copied
+- 2026-11-25: Step 16 slice 8b — the guest's controls reach its ship
+- 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
 - 2026-11-25: Playtest 23 follow-up — the Ship filter shows every ship, the guest included
 - 2026-11-25: Playtest 23, second round — the browser that was locked out, and a friend's hull that was only a picture
 - 2026-11-25: Playtest 23 — a friend can be selected, and a pilot can always come back

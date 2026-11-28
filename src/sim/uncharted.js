@@ -126,7 +126,7 @@ export function tickConnections(dt) {
   });
   for(const id of world.expiredConnections) {
     if(state.players.some(p=>p.place===id || p.warp?.to===id) || [...state.instances.values()].some(r=>r.origin===id)) continue;
-    clearWorldObjects(id); state.places.delete(id); delete world.pockets[id]; unregisterWormholePlace(id);
+    clearWorldObjects(id); state.places.delete(id); delete world.pockets[id]; if (world.pocketsById) delete world.pocketsById[id]; unregisterWormholePlace(id);
     world.expiredConnections.delete(id); emit('wormhole-gone',{id});
   }
 }

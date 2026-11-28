@@ -65,10 +65,15 @@ import { stationsOfWorld } from "./world-places.js";
 import { makeJoinLink, makeJoinUrl, readJoinLink, pageBase } from "./join-link.js";
 import { readSettings, writeSettings, cleanName } from "./settings.js";
 import { checkTurnServers, turnSummary } from "./turn.js";
-import { NET, CHAT, SHIP_STREAM, CONTROLS } from "../data/multiplayer.js";
+import { NET, CHAT, SHIP_STREAM, CONTROLS, TRAVEL_FIELDS } from "../data/multiplayer.js";
 
 /** A whole, non-negative number: what every count on the wire is. */
 const whole = value => Math.max(0, Math.floor(Number(value) || 0));
+
+/** Sub-millisecond wall-epoch timestamp in browsers (matches rAF/performance.now precision); Date.now() fallback in headless VMs. */
+const hrNow = (typeof performance === "object" && typeof performance?.timeOrigin === "number")
+  ? (perfMs = performance.now()) => performance.timeOrigin + perfMs
+  : () => Date.now();
 
 /* ------------------------------------------------------------------------- */
 /* How the session reaches the save                                           */
@@ -100,11 +105,14 @@ const saveKit = {
    * and the world id. Writing a whole save here would fight the game's own capture code,
    * and the host has no business changing anything else about its world.
    */
-  write: next => {
+  write: (next, options = {}) => {
     if (!next || typeof next !== "object") return;
     if (next.world && typeof next.world === "object") {
       if (next.world.guests && typeof next.world.guests === "object") state.worldState.guests = next.world.guests;
       if (typeof next.world.worldId === "string") state.worldState.worldId = next.world.worldId;
+    }
+    if (options?.persist !== false && state.mode === "open" && !state.away && typeof localStorage !== "undefined") {
+      saveAutosave(currentRootSave());
     }
   },
   /**
@@ -385,13 +393,25 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   // went home. `suitcaseRepeatSec` re-sends an unchanged copy, so a packet lost on a flaky
   // channel heals itself without a reconnect.
   let guestSync = 0;                // the host's interval
-  const livePrint = new Map();      // guestId -> what the host last saw the pilot look like
+  const livePrint = new Map();      // guestId -> what the host last saw in `TRAVEL_FIELDS` + `lockers`
+  const visitStatePrint = new Map(); // guestId -> what the host last saved in `visitState`
   const visitPrint = new Map();     // guestId -> what the host last sent in `visit`
   const lastSent = new Map();       // guestId -> when it last went on the wire
   let nextActReqId = 1;
   // The guest's "I am closing this page" hook, so the host gets a final copy and is not left
   // holding a pilot for a browser that is gone (a `bye`; see `net/protocol.js`).
   let pageHook = null;
+
+  const travelFingerprint = live => {
+    if (!live?.profile) return "";
+    const travel = {};
+    for (const field of TRAVEL_FIELDS) {
+      if (field === "lockers" || !(field in live.profile)) continue;
+      travel[field] = live.profile[field];
+    }
+    return JSON.stringify({ profile: travel, lockers: live.lockers || [] });
+  };
+  const visitStateFingerprint = live => (live?.visitState ? JSON.stringify(live.visitState) : "");
 
   /* --- slice 8a: where every pilot is, 24 times a second --------------------------- */
   // The host's timer. `shipTick` is cleared on stop like every other timer; the rate is
@@ -909,6 +929,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
           name: record.name || message.name || "Guest",
           profile: null,
           bundle: kept,
+          visitState: record.visitState || null,
         });
         send(cleanMessage("suitcase", {
           guestId,
@@ -917,6 +938,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
           rev: whole(record.rev),
           bundle: kept,
         }), peerId);
+        lastSent.set(guestId, Date.now());
         pushVisit(guestId);
         noteLine("Tallow Reach", `${record.name || message.name || "A pilot"}'s pilot is newer in this world than the copy that arrived; this world kept its own.`);
         save.write(seenGuest(save.read(), guestId, Date.now()));
@@ -926,6 +948,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       // A record with no bundle holds nothing to defend: fall through and take the guest's.
     }
 
+    const keptVisitState = record?.visitState || null;
     const relocated = relocate(message.bundle, current.world, { index });
     const stored = putGuest(current, guestId, {
       name: message.name || record?.name || "Guest",
@@ -941,6 +964,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       epoch: incoming.epoch,
       rev: incoming.rev,
       bundle: { ...relocated.bundle, token: "" },
+      visitState: keptVisitState,
       // A returning pilot's copy is the newest truth (see the note above), and it starts a
       // new visit: the record stops claiming it is holding a suitcase.
       left: false,
@@ -951,6 +975,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
     if (peerId) guestPeer.set(guestId, peerId);
     livePrint.delete(guestId);
+    visitStatePrint.delete(guestId);
     visitPrint.delete(guestId);
     // The record itself is the simulation's job. `net/` may not touch state.players.
     emit("mp-guest-arrive", {
@@ -958,6 +983,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       name: message.name || record?.name || "Guest",
       profile: null,             // main.js fills this from the bundle with custody.hostProfile
       bundle: relocated.bundle,
+      visitState: keptVisitState,
     });
     send(cleanMessage("suitcase", {
       guestId,
@@ -966,6 +992,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       rev: incoming.rev,
       bundle: { ...relocated.bundle, token: "" },
     }), peerId);
+    lastSent.set(guestId, Date.now());
     pushVisit(guestId);
     noteLine("Tallow Reach", `${message.name || "A pilot"}'s pilot arrived — ${relocated.bundle.summary?.text || "suitcase received"}.`);
     publish();
@@ -985,7 +1012,8 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    * fresh one. A marked record is compared on `lastSeen` by the next hello.
    */
   function forgetPeer(peerId) {
-    retireRows(removeRows(row => row.peerId === peerId));
+    // Peer is already gone; flush live bundle & visitState to host storage before retiring without broadcasting.
+    retireRows(removeRows(row => row.peerId === peerId), { flush: true, sendWire: false });
   }
 
   /**
@@ -1011,15 +1039,29 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       }
       if (!row.peerId || guestPeer.get(row.guestId) === row.peerId) guestPeer.delete(row.guestId);
       livePrint.delete(row.guestId);
+      visitStatePrint.delete(row.guestId);
       visitPrint.delete(row.guestId);
       lastSent.delete(row.guestId);
     }
     return gone;
   }
 
-  /** A row's pilot really has gone: mark the record `left`, tell the world, tell everybody. */
-  function retireRows(gone) {
+  /** A row's pilot really has gone: flush final copy if live, mark `left`, tell the world. */
+  function retireRows(gone, { flush = true, sendWire = true } = {}) {
     if (!gone.length) return false;
+    if (flush && role === "host") {
+      const seenFlush = new Set();
+      for (const g of gone) {
+        if (!g?.guestId || seenFlush.has(g.guestId)) continue;
+        seenFlush.add(g.guestId);
+        const pending = pendingWrite.get(g.guestId);
+        if (pending?.timer) clearTimeout(pending.timer);
+        pendingWrite.delete(g.guestId);
+        if (liveBundleFor(g.guestId)?.profile) {
+          writeBack(g.guestId, { sendWire, peerIdOverride: g.peerId || null });
+        }
+      }
+    }
     // The record, so a returning pilot is not locked out of its own suitcase.
     let stored = save.read();
     const seen = new Set();
@@ -1059,15 +1101,29 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (pending?.timer) clearTimeout(pending.timer);
     pendingWrite.delete(guestId);
     writeBack(guestId);
-    retireRows(removeRows(entry => entry.guestId === guestId && (!peerId || !entry.peerId || entry.peerId === peerId)));
+    retireRows(
+      removeRows(entry => entry.guestId === guestId && (!peerId || !entry.peerId || entry.peerId === peerId)),
+      { flush: false },
+    );
+  }
+
+  /** Host side: resolve a guest peer entry (supports paste-code guests with null peerId). */
+  const resolveGuestEntry = peerId => (
+    peerId
+      ? (guests.find(row => row.peerId === peerId) || null)
+      : (guests.length === 1 && !guests[0].peerId ? guests[0] : null)
+  );
+
+  /** Host side: mark a guest id as recently seen without forcing a synchronous disk flush at 30 Hz. */
+  function markGuestSeen(guestId) {
+    if (!guestId) return;
+    const next = seenGuest(save.read(), guestId, Date.now());
+    save.write(next, { persist: false });
   }
 
   /** Host side: this peer's guest said "still here" (the `ping` heartbeat). */
   function markPeerSeen(peerId) {
-    const guestId = guestIdForPeer(peerId);
-    if (!guestId) return;
-    const next = seenGuest(save.read(), guestId, Date.now());
-    save.write(next);
+    markGuestSeen(guestIdForPeer(peerId));
   }
 
   /**
@@ -1129,7 +1185,18 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    * there is no live record (the guest is docked out of the world, or `sim/` is not
    * running — a test) the stored bundle is sent unchanged, which is still a correct copy.
    */
-  function writeBack(guestId) {
+  /** Persist per-host-world guest state (`visitState`) locally without bumping suitcase `rev`. */
+  function saveGuestVisitState(guestId, visitState) {
+    if (role !== "host" || !guestId || !visitState) return false;
+    const current = save.read();
+    const record = current?.world?.guests?.[guestId];
+    if (!record) return false;
+    const stored = putGuest(current, guestId, { visitState, lastSeen: Date.now() });
+    save.write(stored);
+    return true;
+  }
+
+  function writeBack(guestId, { sendWire = true, peerIdOverride = null } = {}) {
     const current = save.read();
     const record = current?.world?.guests?.[guestId];
     if (!record) return false;
@@ -1144,47 +1211,53 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       })
       : { ...(record.bundle || {}), rev };
     if (!bundle?.profile) return false;
-    const stored = putGuest(current, guestId, { rev, bundle: { ...bundle, token: "" }, lastSeen: Date.now() });
-    save.write(stored);
-    const peerId = guestPeer.get(guestId) || null;
-    const message = cleanMessage("suitcase", {
-      guestId,
-      name: record.name,
-      epoch: whole(record.epoch),
+    const nextVisitState = live && live.visitState !== undefined ? live.visitState : (record.visitState ?? null);
+    const stored = putGuest(current, guestId, {
       rev,
       bundle: { ...bundle, token: "" },
+      visitState: nextVisitState,
+      lastSeen: Date.now(),
     });
-    if (message) send(message, peerId);
-    lastSent.set(guestId, Date.now());
+    save.write(stored);
+    if (live?.visitState) {
+      try { visitStatePrint.set(guestId, visitStateFingerprint(live)); } catch (e) {}
+    }
+    const peerId = peerIdOverride || guestPeer.get(guestId) || null;
+    if (sendWire && (peerId || (paste && paste.live()))) {
+      const message = cleanMessage("suitcase", {
+        guestId,
+        name: record.name,
+        epoch: whole(record.epoch),
+        rev,
+        bundle: { ...bundle, token: "" },
+      });
+      if (message) send(message, peerId);
+      lastSent.set(guestId, Date.now());
+    }
     publish();
     return true;
   }
 
-  /**
-   * **Host side: is the visiting pilot still what this world thinks it is?** (slice 5)
-   *
-   * This is the loop the plan promised and nothing ran: `writeBack` existed from slice 4 but
-   * its only caller was `noteGuestChanged`, which nobody ever called — so a guest's suitcase
-   * only ever held the copy it arrived with, and every credit it earned, every stack it
-   * mined and every module it fitted in the friend's world was lost when it came home. The
-   * owner would have seen it as "coming home rolls my save back".
-   *
-   * It is a *comparison*, not a timer that writes: every `NET.snapshotSec` the host asks
-   * `sim/` what each visitor looks like now, and only a real difference raises `rev`. An
-   * unchanged copy is re-sent every `NET.suitcaseRepeatSec` so a packet lost on a bad channel
-   * heals without anybody reconnecting.
-   */
   function syncGuests() {
     if (role !== "host" || !on) return 0;
     let changed = 0;
-    for (const guestId of [...guestPeer.keys()]) {
+    const seenIds = new Set();
+    for (const guestId of [...guestPeer.keys(), ...guests.map(g => g.guestId)]) {
+      if (!guestId || seenIds.has(guestId)) continue;
+      seenIds.add(guestId);
       const live = liveBundleFor(guestId);
       if (!live?.profile) continue;
       let print = "";
+      let vPrint = "";
       try {
-        print = JSON.stringify({ profile: live.profile, lockers: live.lockers || [] });
+        print = travelFingerprint(live);
+        vPrint = visitStateFingerprint(live);
       } catch (e) {
         continue;                                   // unserialisable: not something to send
+      }
+      if (vPrint && vPrint !== visitStatePrint.get(guestId)) {
+        visitStatePrint.set(guestId, vPrint);
+        saveGuestVisitState(guestId, live.visitState);
       }
       const before = livePrint.get(guestId);
       livePrint.set(guestId, print);
@@ -1199,6 +1272,81 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     return changed;
   }
 
+  /** Flush all live guests immediately before host save/pagehide without waiting for timers. */
+  function flushGuests() {
+    if (role !== "host" || !on) return 0;
+    let saved = 0;
+    const seenIds = new Set();
+    for (const guestId of [...guestPeer.keys(), ...guests.map(g => g.guestId)]) {
+      if (!guestId || seenIds.has(guestId)) continue;
+      seenIds.add(guestId);
+      const live = liveBundleFor(guestId);
+      if (!live?.profile) continue;
+      try {
+        const print = travelFingerprint(live);
+        const vPrint = visitStateFingerprint(live);
+        if (print && print !== livePrint.get(guestId)) {
+          livePrint.set(guestId, print);
+          const pending = pendingWrite.get(guestId);
+          if (pending?.timer) clearTimeout(pending.timer);
+          pendingWrite.delete(guestId);
+          if (writeBack(guestId, { sendWire: false })) saved += 1;
+          if (vPrint) visitStatePrint.set(guestId, vPrint);
+          continue;
+        }
+        if (vPrint && vPrint !== visitStatePrint.get(guestId)) {
+          visitStatePrint.set(guestId, vPrint);
+          if (saveGuestVisitState(guestId, live.visitState)) saved += 1;
+        }
+      } catch (e) {}
+    }
+    return saved;
+  }
+
+  const visitPrintOf = snap => JSON.stringify({
+    docked: !!snap.docked,
+    place: snap.place || "",
+    pw: snap.pw || 0,
+    sw: snap.sw || 0,
+    msl: snap.msl || 0,
+    hull: snap.hull || 0,
+    shield: snap.shield || 0,
+    held: snap.held || null,
+    openCacheId: snap.openCacheId || "",
+    profile: snap.profile || null,
+    world: snap.world || null,
+    galaxy: snap.galaxy || null,
+    shops: snap.shops || null,
+    wormholes: Array.isArray(snap.wormholes) ? snap.wormholes.map(w => ({
+      id: w.id,
+      parent: w.parent,
+      template: w.template,
+      seed: w.seed,
+      doomed: !!w.doomed,
+      lifetimeBucket: w.doomed ? 0 : ((w.lifetime || 0) > 60 ? 1 : Math.max(0, Math.ceil(w.lifetime || 0))),
+    })) : null,
+    connections: Array.isArray(snap.connections) ? snap.connections.map(c => ({
+      epoch: c.epoch || 0,
+      live: (c.lifetime || 0) > 0,
+    })) : null,
+    instance: snap.instance ? {
+      id: snap.instance.id,
+      template: snap.instance.template,
+      seed: snap.instance.seed,
+      origin: snap.instance.origin,
+      reentrant: !!snap.instance.reentrant,
+      warned: !!snap.instance.warned,
+      expired: !!snap.instance.expired,
+      collapsed: !!snap.instance.collapsed,
+      lifetimeBucket: snap.instance.warned
+        ? Math.max(0, Math.ceil(snap.instance.lifetime || 0))
+        : ((snap.instance.lifetime || 0) > 0 ? 1 : 0),
+      objectiveMet: !!snap.instance.objectiveMet,
+      mined: snap.instance.mined || 0,
+      cache: snap.instance.cache || null,
+    } : null,
+  });
+
   function pushVisit(guestId, { ackReqId = 0, notice = "", sound = "" } = {}) {
     if (role !== "host" || !on || !guestId) return false;
     const req = { guestId, answered: false, snapshot: null };
@@ -1206,18 +1354,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (!req.answered || !req.snapshot) return false;
     const snap = req.snapshot;
     try {
-      visitPrint.set(guestId, JSON.stringify({
-        docked: !!snap.docked,
-        place: snap.place || "",
-        pw: snap.pw || 0,
-        sw: snap.sw || 0,
-        msl: snap.msl || 0,
-        hull: snap.hull || 0,
-        shield: snap.shield || 0,
-        held: snap.held || null,
-        profile: snap.profile || null,
-        world: snap.world || null,
-      }));
+      visitPrint.set(guestId, visitPrintOf(snap));
     } catch (e) {}
     const msg = cleanMessage("visit", {
       ...snap,
@@ -1239,18 +1376,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const snap = req.snapshot;
     let print = "";
     try {
-      print = JSON.stringify({
-        docked: !!snap.docked,
-        place: snap.place || "",
-        pw: snap.pw || 0,
-        sw: snap.sw || 0,
-        msl: snap.msl || 0,
-        hull: snap.hull || 0,
-        shield: snap.shield || 0,
-        held: snap.held || null,
-        profile: snap.profile || null,
-        world: snap.world || null,
-      });
+      print = visitPrintOf(snap);
     } catch (e) {
       return false;
     }
@@ -1266,11 +1392,17 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   function onVisitPush(payload = {}) {
     if (role !== "host" || !on || !payload.guestId) return;
     pushVisit(payload.guestId, payload);
+    if (payload.dockTransition) broadcastShips();
     const live = liveBundleFor(payload.guestId);
     if (live?.profile) {
       try {
-        const print = JSON.stringify({ profile: live.profile, lockers: live.lockers || [] });
-        if (print !== livePrint.get(payload.guestId)) {
+        const vPrint = visitStateFingerprint(live);
+        if (vPrint && vPrint !== visitStatePrint.get(payload.guestId)) {
+          visitStatePrint.set(payload.guestId, vPrint);
+          saveGuestVisitState(payload.guestId, live.visitState);
+        }
+        const print = travelFingerprint(live);
+        if (print && print !== livePrint.get(payload.guestId)) {
           livePrint.set(payload.guestId, print);
           noteGuestChanged(payload.guestId);
         }
@@ -1329,7 +1461,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    */
   function startShipStream() {
     if (shipTick || role !== "host") return false;
-    shipTick = setInterval(broadcastShips, Math.max(1, Math.round(1000 / SHIP_STREAM.hz)));
+    shipTick = setInterval(() => {
+      broadcastShips();
+      if (entityTick === -1) broadcastEntities();
+    }, Math.max(1, Math.round(1000 / SHIP_STREAM.hz)));
     if (typeof shipTick?.unref === "function") shipTick.unref();
     return true;
   }
@@ -1342,7 +1477,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     on("host-keepalive-tick", () => {
       if (role !== "host" || !on) return;
       const now = Date.now();
-      const interval = Math.max(1, Math.round(1000 / SHIP_STREAM.hz));
+      const interval = Math.max(1, Math.round(1000 / SHIP_STREAM.hz) - 4);
       if (now - lastKeepaliveShipAt < interval) return;
       lastKeepaliveShipAt = now;
       broadcastShips();
@@ -1371,13 +1506,35 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
   function startEntityStream() {
     if (entityTick || role !== "host") return false;
+    if (shipTick) {
+      // Piggyback on `shipTick` so ship poses and spawned cannon shots come from the same tick.
+      entityTick = -1;
+      return true;
+    }
     entityTick = setInterval(broadcastEntities, Math.max(1, Math.round(1000 / SHIP_STREAM.hz)));
     if (typeof entityTick?.unref === "function") entityTick.unref();
     return true;
   }
   function onEntities(message) {
     if (role !== "guest") return;
-    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], booms: message.booms || 0, enemies: message.enemies || [], picks: message.picks || 0, efires: Array.isArray(message.efires) ? message.efires : [], at: Date.now() }); } catch (e) {}
+    try {
+      emit("mp-entities", {
+        place: message.place,
+        bullets: message.bullets || [],
+        missiles: message.missiles || [],
+        crates: message.crates || [],
+        fx: message.fx || [],
+        booms: message.booms || 0,
+        enemies: message.enemies || [],
+        picks: message.picks || 0,
+        efires: Array.isArray(message.efires) ? message.efires : [],
+        rocks: Array.isArray(message.rocks) ? message.rocks : null,
+        rifts: message.rifts || [],
+        gates: message.gates || [],
+        caches: message.caches || [],
+        at: hrNow(),
+      });
+    } catch (e) {}
   }
 
   /**
@@ -1392,7 +1549,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    */
   function onShips(message) {
     if (role !== "guest") return;
-    const now = Date.now();
+    const now = hrNow();
     const mine = ownGuestId();
     const all = Array.isArray(message.ships) ? message.ships : [];
     const own = all.find(entry => entry && entry.id === mine) || null;
@@ -1429,7 +1586,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       stop: input.stop, brake: input.brake, boost: input.boost, fire: input.fire, sec: input.sec,
       aim: [aim.x, aim.y, aim.z],
     });
-    return message ? send(message) : false;
+    return message ? send(message, hostPeerId || null) : false;
   }
 
   /** The guest's clock for that asking. Started when a session starts as a guest. */
@@ -1452,9 +1609,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    */
   function onControls(message, peerId) {
     if (role !== "host") return;
-    const entry = guests.find(row => row.peerId && row.peerId === peerId);
+    const entry = resolveGuestEntry(peerId);
     if (!entry) return;
-    markPeerSeen(peerId);
+    markGuestSeen(entry.guestId);
     try {
       emit("mp-guest-controls", { guestId: entry.guestId, input: message });
     } catch (e) { /* a broken screen must not break a session */ }
@@ -1464,11 +1621,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
   function onWarp(message, peerId) {
     if (role !== "host") return;
-    const entry = guests.find(row => row.peerId && row.peerId === peerId);
+    const entry = resolveGuestEntry(peerId);
     if (!entry) return;
     const to = typeof message.to === "string" ? message.to.trim() : "";
     if (!to) return;
-    markPeerSeen(peerId);
+    markGuestSeen(entry.guestId);
     try {
       emit("mp-guest-warp", { guestId: entry.guestId, to });
     } catch (e) { /* a broken listener must not break a session */ }
@@ -1476,9 +1633,9 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
   function onDock(message, peerId) {
     if (role !== "host") return;
-    const entry = guests.find(row => row.peerId && row.peerId === peerId);
+    const entry = resolveGuestEntry(peerId);
     if (!entry) return;
-    markPeerSeen(peerId);
+    markGuestSeen(entry.guestId);
     try {
       emit("mp-guest-dock", { guestId: entry.guestId });
     } catch (e) { /* a broken listener must not break a session */ }
@@ -1490,14 +1647,14 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     const dest = typeof to === "string" ? to.trim() : "";
     if (!dest) return false;
     const message = cleanMessage("warp", { to: dest });
-    return message ? send(message) : false;
+    return message ? send(message, hostPeerId || null) : false;
   }
 
   /** Guest side: ask the host to dock my ship now. */
   function sendDock() {
     if (role !== "guest" || !on || !welcomed) return false;
     const message = cleanMessage("dock", {});
-    return message ? send(message) : false;
+    return message ? send(message, hostPeerId || null) : false;
   }
 
   /** Guest side: ask the host to execute a validated inventory/fitting/shop/mission/slot action. */
@@ -1511,14 +1668,16 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
 
   function onAct(message, peerId) {
     if (role !== "host") return;
-    const entry = peerId
-      ? guests.find(row => row.peerId === peerId)
-      : (guests.length === 1 && !guests[0].peerId ? guests[0] : null);
+    const entry = resolveGuestEntry(peerId);
     if (!entry) return;
-    markPeerSeen(peerId);
+    markGuestSeen(entry.guestId);
     const req = { guestId: entry.guestId, action: message, answered: false, result: null };
     try { emit("mp-guest-act", req); } catch (e) {}
     const res = req.result || {};
+    if (res.shipsChanged) {
+      broadcastShips();
+      broadcastEntities();
+    }
     pushVisit(entry.guestId, {
       ackReqId: message.reqId || 0,
       notice: res.notice || "",
@@ -1528,8 +1687,13 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
       const live = liveBundleFor(entry.guestId);
       if (live?.profile) {
         try {
-          const print = JSON.stringify({ profile: live.profile, lockers: live.lockers || [] });
-          if (print !== livePrint.get(entry.guestId)) {
+          const vPrint = visitStateFingerprint(live);
+          if (vPrint && vPrint !== visitStatePrint.get(entry.guestId)) {
+            visitStatePrint.set(entry.guestId, vPrint);
+            saveGuestVisitState(entry.guestId, live.visitState);
+          }
+          const print = travelFingerprint(live);
+          if (print && print !== livePrint.get(entry.guestId)) {
             livePrint.set(entry.guestId, print);
             noteGuestChanged(entry.guestId);
           }
@@ -1552,7 +1716,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    * stored bundle is used — never a guess.
    */
   function liveBundleFor(guestId) {
-    const request = { guestId, profile: null, lockers: [], answered: false };
+    const request = { guestId, profile: null, lockers: [], visitState: null, answered: false };
     try {
       emit("mp-guest-bundle-request", request);
     } catch (e) { /* a broken listener must not break a session */ }
@@ -1896,6 +2060,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     // the record is marked `left` at once instead of when the browser's channel finally
     // closes). It is not a promise: a crashed tab sends nothing, and the host still copes.
     if (!quiet) {
+      if (role === "host" && guests.length) {
+        try {
+          retireRows(removeRows(() => true), { flush: true, sendWire: true });
+        } catch (e) {}
+      }
       try {
         leaveWord();
       } catch (e) { /* a goodbye is never worth throwing over */ }
@@ -1908,9 +2077,14 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     if (guestSync) { clearInterval(guestSync); guestSync = 0; }
     if (shipTick) { clearInterval(shipTick); shipTick = 0; }
-    if (entityTick) { clearInterval(entityTick); entityTick = 0; }
+    if (entityTick) { if (entityTick !== -1) clearInterval(entityTick); entityTick = 0; }
     if (controlTick) { clearInterval(controlTick); controlTick = 0; }
     visitPrint.clear();
+    visitStatePrint.clear();
+    livePrint.clear();
+    guestPeer.clear();
+    lastWrite.clear();
+    lastSent.clear();
     for (const { timer } of pendingWrite.values()) if (timer) clearTimeout(timer);
     pendingWrite.clear();
     clearStallTimer();
@@ -2171,6 +2345,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     sendAction,
     pushVisit,
     onVisitPush,
+    flushGuests,
     // Slice 5: the guest's own watchdog, on the same seam — a test hands it a clock instead of
     // waiting twenty seconds for a real one.
     checkHostAlive,
@@ -2236,6 +2411,10 @@ export const requestGuestAction = action => (active ? active.sendAction(action) 
 
 on("mp-guest-visit-push", payload => {
   if (active && typeof active.onVisitPush === "function") active.onVisitPush(payload);
+});
+
+on("mp-host-flush", () => {
+  if (active && typeof active.flushGuests === "function") active.flushGuests();
 });
 
 /** Own guest id for this session (for tests/main). */

@@ -306,6 +306,14 @@ export function setupHud() {
     weaponSlotsCache = null;
     setReticle(true);
   });
+  const syncWorldHud = () => {
+    if (state.ui.intro) return;
+    routeCache = null;
+    weaponSlotsCache = null;
+    setReticle(Boolean(state.player && !state.player.docked));
+  };
+  on("open-world-entered", syncWorldHud);
+  on("mp-refresh-visit", syncWorldHud);
   on("campaign-act-entered", () => {
     weaponSlotsCache = null;
     setReticle(Boolean(state.player && !state.player.docked));
@@ -459,8 +467,9 @@ export function updateHud(dt) {
 
   // Beam progress toward the next ore: a small bar with the percentage, shown
   // only while the beam is actually cutting, right under the "left in rock"
-  // hint.
-  const fittedBeam = (state.beams || [])[0];
+  // hint. Match the beam fitted in the currently selected primary bay.
+  const beamSlot = primarySlotIndex(S.pw, P);
+  const fittedBeam = (state.beams || []).find(b => b.i === beamSlot) || (state.beams || [])[0];
   el.beam.hidden = !(F.beamOn && fittedBeam);
   if (!el.beam.hidden) {
     const pct = Math.min(100, Math.floor(((F.beamT || 0) / fittedBeam.period) * 100));

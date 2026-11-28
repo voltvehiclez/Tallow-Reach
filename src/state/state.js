@@ -3,7 +3,7 @@
 // packed together as `{ v, profile, world }` (see profile.js). Everything else
 // is rebuilt on load.
 
-import { newProfile, newWorld, newSave, newCampaignSave, newModeSave, SAVE_VERSION, cleanAway } from "./profile.js";
+import { newProfile, newWorld, newSave, newCampaignSave, newModeSave, SAVE_VERSION, cleanAway, buildGuestVisitState } from "./profile.js";
 import { saveAutosave } from "./storage.js";
 import { neutralControls } from "./controls.js";
 import { DEFAULT_SHIP } from "../data/ships.js";
@@ -90,14 +90,14 @@ export function worldByOwner(owner = "host", fallback = state.worldState) {
  * Inside a temporary run this is the pilot's own spot in it, so logging out
  * mid-rift comes back mid-rift; `captureInstances()` keeps the run itself alive.
  */
-export function captureResume() {
-  const P = localPlayer();
+export function captureResume(P = localPlayer(), world = state.worldState) {
   if (!P || P.docked || P.dead) {
-    state.worldState.resume = null;
+    if (world) world.resume = null;
     return null;
   }
-  state.worldState.resume = { pos: P.pos.toArray(), quat: P.quat.toArray(), sh: P.sh, en: P.en };
-  return state.worldState.resume;
+  const snap = { pos: P.pos.toArray(), quat: P.quat.toArray(), sh: P.sh, en: P.en };
+  if (world) world.resume = snap;
+  return snap;
 }
 
 /**
@@ -255,6 +255,14 @@ function captureActiveModeSave() {
   if (state.mode !== "campaign") captureWormholes();
   else state.worldState.wormholes = [];
   state.worldState.destination = state.ui.destination;
+  if (state.worldState?.guests && Array.isArray(state.players)) {
+    for (const p of state.players) {
+      if (!p?.guestId || !p.profile) continue;
+      const rec = state.worldState.guests[p.guestId];
+      if (!rec) continue;
+      rec.visitState = buildGuestVisitState(p, p.guestWorld);
+    }
+  }
   const { profile, world } = withHeldStackRestored(state.profile, state.worldState, state.ui.invHeld);
   return {
     v: SAVE_VERSION,
@@ -535,6 +543,19 @@ for (const [alias, field] of Object.entries(runtimeFields)) {
 /** Show a hint until the next simulation tick. */
 export const say = text => {
   state.hud.prompt = text;
+};
+
+/**
+ * Show a transient HUD hint for `player`: local writes `state.hud.prompt`; a remote guest keeps
+ * it on `player.hudPrompt` for at least `holdSec` so a 24 Hz snapshot stream never misses a 1-tick hint.
+ */
+export const sayForPlayer = (player, text, holdSec = 0.12) => {
+  if (!player || player === state.player) {
+    say(text);
+    return;
+  }
+  player.hudPrompt = String(text || "");
+  player.hudPromptUntil = (Number(state.time) || 0) + Math.max(0, Number(holdSec) || 0);
 };
 
 /** Show a centre-screen message for `secs` seconds. */

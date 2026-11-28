@@ -117,17 +117,7 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Rule:** when a record is frozen, BOTH halves must respect it — the copy on the wire and the copy the game keeps. A guest installing its own whole save uses its own seam (`saveKit.install`), never the host's narrow one; `captureActiveModeSave` hands an away pilot's record through untouched. Check anything that moves items at the seam the game actually stores through, not on plain objects.
 - **Enforced by:** four tests, chosen so **undoing any one fix fails one of them** — a test that passes with the fix reverted is not enforcement. `multiplayer-carry` (the round trip, the doubling failure mode, the frozen world not re-stamped) and `multiplayer-bring-pilot` (the real session seam: packing leaves the live stations empty, a suitcase from the host actually reaches the save).
 
-### L35. A connection that ends is an event the host must act on
-- **Seen:** owner, playtest 14 — "When my laptop leaves it still says that laptop is logged in in the players list and there is no notification in chat that it left." Its ship stayed too, and the pilot could not get back in.
-- **Cause:** three omissions on one path. The host removed the row but never wrote the record, so `world.guests[id]` kept the OLD token hash and the next hello was a "returning guest" refused for a token it no longer had. No chat line and no `mp-guest-left` were emitted. And `upsertGuest` let a `welcome`/`presence` list (no peer id) overwrite a known peer id with nothing, after which that guest could never be matched to the peer that left.
-- **Rule:** a departed peer is handled in ONE place (`forgetPeer`), and it touches every copy of the fact: the live row, the chat, `mp-guest-left`, presence, and the stored record. A record whose pilot has gone is a suitcase, not an identity — mark it (`left`); a fresh link re-admits it. Never overwrite a known correlation id with a missing one.
-- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (leaving is removed/announced/ship gone; a returning pilot gets in with a new token).
-
-### L36. A guard that returns `false` reads as "nothing happened" to every caller
-- **Seen:** owner, playtest 14 — "clicking the bring pilot home doesnt do anything... Im stuck in the menu."
-- **Cause:** `comeHome()` opened with `if (!leaveVisit()) return false;`. From the title there is no session to leave, so it returned before unpacking anything, and the caller showed nothing. The same shape hid the second half: unpacking used the ACTIVE save, which on the title is not the open world's, so even a caller that got that far had no profile to unpack into.
-- **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
-- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
+<!-- L35–L44 live in [archive/MULTIPLAYER_SLICE4_5_LESSONS.md](archive/MULTIPLAYER_SLICE4_5_LESSONS.md). -->
 
 ### L45. A panel raised by an event has to leave on its own
 - **Seen (owner, playtest 20):** *"Chat when a message is said then the chat is visible. However it
@@ -145,6 +135,93 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** `tests/multiplayer-ui.test.mjs` — "playtest 20: the chat shows a line and takes
   itself away, unless it is pinned": hidden before anything is said, up inside `CHAT.autoHideSec`,
   gone after it, pinned and typing keep it, a panel or the title does not.
+
+### L57. Paused background host keepalive needs non-zero sub-audible audio; fast bolts exceed `50 m` `snapM`
+- **Seen (owner, `2026-11-27` on `2026-11-27f`):** switching tabs on the host while unpaused ran smoothly,
+  but switching tabs with the Pause menu open throttled guest updates to 1 Hz (1 update/sec); cannon
+  shots also appeared to jump at ~24–30 fps while flying.
+- **Cause:** `setPause(true)` calls `setAudioSuspended(true)` on the main audio engine, leaving only
+  `hostAudioCtx` whose `gain = 0` / all-zero `AudioWorkletProcessor` fell below Chromium's `-65 dBFS`
+  audible-tab threshold and triggered background throttling; meanwhile `900+300 m/s` cannon shots
+  moved `44–65 m` per `42 ms` snapshot, tripping `entityStream`'s `snapM: 50` cutoff every frame.
+- **Rule:** keep `hostAudioCtx` outputting an inaudible sub-sonic carrier (`12 Hz` at `0.002` / `-57 dBFS`
+  through a `0 -> 1` ramped gain, resumed on `visibilitychange`) so paused/muted background host tabs
+  retain Chromium's audible exemption; size `entityStream`'s `snapM` (`300 m`) for max projectile step
+  distance and piggyback `startEntityStream` on `shipTick` so ship and bolt snapshots share one tick.
+- **Enforced by:** `tests/multiplayer-8c-fixes.test.mjs` (`1200 m/s` bolt interpolation at `snapM: 300`)
+  and `tests/multiplayer-playtest-20261127.test.mjs` (keepalive carrier + `snapM: 300` guard).
+
+### L56. Multi-pocket simulation, guest HUD/beam vitals, rock sync, and `file://` host keepalive
+- **Seen (owner, `2026-11-27` on `2026-11-27d`):** minimizing host on `file://` froze the world; guest
+  Launch occasionally snapped back to `[0,0,0]`/`docked` or froze in remote pockets with broken rock
+  collisions; mining didn't show progress bar/hints/power drain or sync depleted/shrunk rocks; and
+  re-joining or losing Nostr relays spammed console errors.
+- **Cause:** `new Worker(blob:)` failed on `file://` without `data:` Worker or silent `AudioWorkletNode`
+  fallback; `applySelfShip` applied stale pre-launch `docked` snapshots and `applyVisitSnapshot`
+  refilled power mid-flight; `flight()` read `state.world` instead of `placeWorld(P.place)`; `say()`
+  dropped non-local guest prompts; `SHIP_FIELDS` omitted `beamT`/`pwr`/`pwrDraw`/`enFrac`/`hint`;
+  `hud.js` read `state.beams[0]` instead of `primarySlotIndex`; `mp-entities` omitted rocks; and
+  Trystero warned on dead relays.
+- **Rule:** add `data:` Worker + gesture-gated zero-gain `AudioWorkletNode` keepalive on host; gate
+  `applySelfShip` against stale pre-transition `docked` snapshots (`dockStreamCaughtUp`) and preserve
+  mid-flight power across `applyVisitSnapshot`; use `placeWorld(P.place || state.place)` in `flight()`;
+  route non-local hints via `sayForPlayer` + `step.js` expiration; sync `beamT`/`pwr`/`pwrDraw`/`enFrac`/`hint`
+  and `rocks` (`syncPocketRocks`, skipping `populateField` when `_net` rocks exist and resetting
+  `loaded = false` in `clearNetEntities`); match `hud.js` beam by `primarySlotIndex`; and keep
+  curated `RELAYS.relayUrls` with `warnOnRelayFailure = false`.
+- **Enforced by:** `tests/multiplayer-playtest-20261127.test.mjs` and `tests/multiplayer-weapons.test.mjs`.
+
+### L55. Entity views must key by `${kind}:${id}` and cube faces must wait for `texture.image`
+- **Seen (owner, `2026-11-27` on `2026-11-27d`):** Ferrite asteroids in the belt visually appeared as
+  firing red laser bolts, and `WebGLRenderer.texImage2D` logged `image is undefined` at boot.
+- **Cause:** `views.js` keyed its `drawn` map by `${group}:${id}` (`"entity:<id>"`), colliding rock IDs
+  with bullet/crate/missile IDs; and `cubemap.js` `orientFace` set `texture.needsUpdate = true` before
+  async WebP `texture.image` finished decoding.
+- **Rule:** key `views.js` `drawn` entries by `${kind}:${id}` across all entity kinds, and set
+  `texture.needsUpdate = true` in `orientFace` only when `texture.image` exists.
+- **Enforced by:** `tests/views.test.mjs` (overlapping rock/bullet ID isolation) and `tests/skybox.test.mjs`
+  (`orientFace` `texture.image` guard).
+
+### L54. Integration glue in `src/main.js` must not swallow missing symbols or skip `intro` exit sync
+- **Seen (owner, `2026-11-27` on `2026-11-27c`):** guest `G` docking still did nothing at `0 m/s`,
+  and undocked relog restored ship/position with no flight HUD or crosshair reticle.
+- **Cause:** `mp-guest-dock` called `cancelGuestHeld(P)` without importing it inside an empty
+  `try/catch`, turning a missing-import `ReferenceError` into an empty notice; and on undocked relog
+  `"launched"` fired while `state.ui.intro === true` (ignored by `ui/hud.js`), `enterGameMode("open")`
+  did not tell `ui/hud.js` to re-sync `#hud`/reticle, and `mp-refresh-visit` passed `Pose[]` instead
+  of `latestSelf[0]` to `applySelfShip`.
+- **Rule:** never leave bare `catch (e) {}` blocks on `src/main.js` action/visit paths, check whole-bundle
+  undeclared calls across `src/main.js`, index `stream.sample()` before passing a `Pose` to
+  `applySelfShip`, and emit `"open-world-entered"` after clearing `state.ui.intro` so `ui/hud.js`
+  syncs HUD visibility and reticle state.
+- **Enforced by:** `tests/multiplayer-playtest-20261127.test.mjs` — static esbuild undeclared-call
+  guard + two-VM real `src/main.js` playtest (`KeyG` dock + `cancelGuestHeld`, mission accept/hand-in,
+  and undocked relog HUD/reticle).
+
+### L53. Host-scoped guest progress stays in `world.guests[guestId].visitState` and survives disconnects and UI opens
+- **Seen (owner, `2026-11-27`):** rejoining a friend's world after leaving or reloading wiped host-world
+  missions, flags, contracts, position, shield/boost, and docked non-home station, and clicking Open
+  World / Continue overwritten an active visit via `resumeFromSave()`.
+- **Cause:** `hostProfile()` discarded home fields (`missions`/`flags`/`done`/`kills`) instead of loading
+  per-host-world `visitState`; `saveKit.write` never flushed `saveAutosave`, `forgetPeer` dropped rows
+  without flushing live state, and `enterGameMode("open")` ran local `resumeFromSave()` while `state.away`.
+- **Rule:** store host-scoped progress in `world.guests[guestId].visitState` (separate from portable
+  `bundle`), flush on `syncGuests`/`forgetPeer`/`stop`/`mp-host-flush`, persist via `saveAutosave`
+  (gating 30 Hz `markGuestSeen` with `{ persist: false }`), and skip `resumeFromSave()` when `state.away`.
+- **Enforced by:** `tests/multiplayer-playtest-20261127.test.mjs` — `visitState` survival across dirty
+  drops, host reloads, and `fresh: true` rejoins without custody leak; `enterGameMode("open")` guard.
+
+### L52. Shadowed guest ships must compute derived HUD fields, replace grace timers, and allow null paste-code peers
+- **Seen (owner, `2026-11-27`):** guest HUD speed froze at `0 m/s`, docking bounced after 250 ms or
+  failed silently over paste-code (`peerId: null`), and over-speed dock presses gave no feedback.
+- **Cause:** `applySelfShip` wrote `P.v` without updating `P.measuredSpeed`/`P.forwardSpeed`;
+  `withinDockGrace` ignored stale `ships` frames by wall clock rather than snapshot state; and
+  `session.js` rejected `!peerId` messages for paste-code connections.
+- **Rule:** update derived instruments (`syncSpeedFromVelocity`) whenever snapshots write `P.v`/`docked`;
+  gate snapshot `docked` flips deterministically on `lastVisitDockState` + `dockStreamCaughtUp`; route
+  `!peerId` via `resolveGuestEntry`; and emit `dockFailureReason` on `"docking-denied"`.
+- **Enforced by:** `tests/multiplayer-playtest-20261127.test.mjs` — `syncSpeedFromVelocity`, paste-code
+  `peerId: null` routing, `tryDock` speed denial notice, and removal of `withinDockGrace`.
 
 ### L51. A guest world view needs one interpolation buffer and host-parity SFX gates
 - **Seen (owner, playtest 26):** guest saw remote NPCs and bullets stutter at 24 Hz (60 Hz `prevPoses`
@@ -194,94 +271,6 @@ Mission lessons are first because missions are where most bugs have come from. T
 - **Enforced by:** `tests/multiplayer-8c-fixes.test.mjs` — Bug 1 toggles `setupMultiplayer()` from Pause
   and asserts `state.multiplayer` flips in sync.
 
-### L47. An invitation is not an identity
-- **Seen (owner, playtest 22):** *"If a second guest player joins, first guest is kicked out … the first
-  guest is never really able to rejoin."* One friend could visit; the second took the first one's place,
-  and the one thrown out then met *"That link has already been used, or it was copied wrongly"*.
-- **Cause:** a join link carries **one** secret per world (`?join=<worldId>#<token>`), and the guest used
-  that secret as **its own**: `guestId = guest-<token.slice(0,8)>`, `hello.token = linkToken`. Every friend
-  on one link arrived as the same pilot, so the host's one-window-per-pilot rule (correct code) retired the
-  first to make room, rewrote the record's hash, and left the retired browser holding a secret that no
-  longer matched. The symptom named the wrong object entirely.
-- **Rule:** a credential the *sender* hands out is never the identity of the *receiver*. Identity is minted
-  where the pilot lives (here `tr_mp.pilotToken`, one per browser) and sent every time; the invitation only
-  decides *where* it may be used. "Same person?" and "allowed in?" are two questions, and one shared secret
-  cannot answer both.
-- **A cap is a different bug from a collision.** The same report said "unlimited players"; raising
-  `NET.maxGuests` would have hidden the symptom for a week without fixing anything — the limit was never
-  reached. Ask which one the evidence supports before changing a number.
-- **Enforced by:** `tests/multiplayer-session.test.mjs` — "two guests with the same link are two pilots, and
-  neither is kicked", "the same pilot in two windows is still a takeover", "a guest's identity is its own
-  browser's, not the link's secret".
-
-### L46. A state read at a glance wants a colour, not a second word
-- **Seen (owner, playtest 22):** the chat's Pin button changed its word to *Pinned*, in the same breath as
-  an ask to make that column **narrower** — the word was doing a job the colour can do.
-- **Cause:** a label that changes is *unambiguous*, which suits a big button and not a 46-pixel strip: the
-  longest label sets the width for ever, and the word still does not say which way the *press* goes.
-- **Rule:** in a narrow, glanceable control the state is the fill and the label is the verb: one word that
-  never changes (*Pin*), amber-filled when on, amber-outlined when off, with `aria-pressed` and a `title`
-  for anybody who cannot see colour.
-- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the pin's word is asserted constant, both fills are
-  asserted in `src/styles.css`, and the players strip's width is capped.
-
-### L44. A secret one side strips has to be put back by the other
-- **Seen (slice 5, found by the reconnect test):** rejoining in a **fresh session** — what a closed tab
-  or a lost connection leaves — was refused as *"that link has already been used"*. The copy a guest
-  keeps is the copy the **host** sent back, and a host never keeps a token (`guestRecord` deletes it),
-  so the guest had nothing left to prove itself with. Every live-session test passed, because a
-  session still holds the copy it packed.
-- **Rule:** when one side deliberately does not store a value (a secret, a hash, a session token),
-  every later send takes it from the field that survives (`away.token`), never from the copy it was
-  removed from. And a rejoin is not a variant of a live session: test it with a **new** session,
-  because that is the only shape a restart has.
-- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "rejoining after a loss keeps the version the
-  server already has", which starts a second guest session against the same host.
-
-### L43. A rule with no caller is not a feature
-- **Seen (slice 5, found by writing the test that should have passed):** the host was to write a
-  visiting pilot's suitcase back every couple of seconds. `writeBack` and its trigger existed and the
-  docs described both — but the loop was never written, so a guest came home with the copy it
-  arrived with.
-- **Cause:** each piece was tested on its own and passed; nothing tested the **seam** — that something
-  calls the piece on a clock, in a live session. A function nothing calls passes every test it has,
-  because the tests call it themselves.
-- **Rule:** when a slice promises a loop ("kept current", "every N seconds"), the test runs two
-  sessions and asserts the other side's copy changed **without the test calling the function**, and
-  the docs name the caller. Before claiming a loop is built, grep its callers: if only tests call it,
-  it is not built.
-- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "the host writes what a visiting pilot
-  became, not only what it arrived with", which drives `syncGuests` from the session's own clock.
-
-### L42. A screen that replaces the menu must earn it, every time, by evidence
-- **Seen (owner, playtest 18):** leaving a host's world put the laptop on *"Your pilot is in hostpc's
-  world"*, and that card's own **Main menu** button re-raised it on the next draw.
-- **Cause:** the condition was *the away marker exists*, true for the whole visit, so the card was the
-  title screen for as long as the visit lasted; nothing compared the copies. A flag describing *what
-  happened* (the pilot left) was used as if it described *a problem* (a newer copy is waiting).
-- **Rule:** a screen that takes the menu's place is raised by a **press** and justified by **evidence at
-  that press**, not by a state that persists. When a flag means "an event happened", ask what the
-  player can *do* right now; if the answer is "only sometimes", it needs a companion test and a door
-  that leaves the flag alone.
-- **Playtest 20 corrected the second half of this, twice over** (owner: *"logging into the guests
-  own open world does not give a prompt to bring their pilot home"*, then *"Doesnt matter if
-  nothing has changed, game should always try to use the latest pilot version since even small
-  things like pilot position can change."*). The evidence a press needs is not that two copies
-  differ — that is a question the player cannot see — but that the player is about to do something
-  the state forbids: **while the pilot is away, Open World always asks, and its answer always
-  takes the copy that world holds.** A comparison that decides whether to *offer* the one act that
-  brings the pilot back is a comparison deciding nothing: the comparison is gone (`isNewerCopy`,
-  `newerCopyAway` deleted), and `shipPlaces`/hull damage move with no number changing.
-- **Playtest 21 finished the shape: a rule that closes a door must leave a room to stand in.** A3's
-  guard soon stopped *every* way into the open world, so a player who had just sent their pilot sat
-  on the join screen with nothing to press — the right rule, enforced one screen too far. When the
-  honest answer is "this is not built yet", build a **named stand-in** and say what it is in one
-  sentence (a notice when the world opens), rather than locking the door and explaining the lock.
-- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when
-  `ui.awayCard` was raised by the press; Open World asks unconditionally while away and compares
-  nothing; "coming home takes the copy that world holds — a tie is not a reason to skip it"; and
-  "the visit opens the stand-in world and says it is not your friend's".
-
 [More lessons](archive/reticle-and-recovery-lessons.md) — L12–L14, L17, L20, L21–L29, L31 and L32,
-and [Slice 4–5 custody/UI lessons](archive/MULTIPLAYER_SLICE4_5_LESSONS.md) — L37–L41,
+and [Slice 4–5 custody/UI/rejoin lessons](archive/MULTIPLAYER_SLICE4_5_LESSONS.md) — L35–L44, L46–L47,
 moved verbatim to keep this file under its size limit.

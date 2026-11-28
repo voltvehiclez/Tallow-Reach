@@ -1,8 +1,8 @@
-# Playtest — step 16, slice 8c: the host's world on the guest's screen
+# Playtest — step 16, slice 8c & full guest parity: the host's world on the guest's screen
 
-**Build: `2026-11-27a`** — both machines. Check it in **Connection details** (or the title card); two machines on different builds cannot be trusted to agree about anything.
+**Build: `2026-11-27h`** — both machines. Check it in **Connection details** (or the title card / chat line); two machines on different builds cannot be trusted to agree about anything.
 
-*Fixes in `2026-11-27a`: Pause-menu Multiplayer toggle works immediately; docked guests stay docked until explicit Launch and camera snaps across dock/launch; returning home purges all `_net` entities and leftover controls cleanly; remote hostiles/bullets interpolate smoothly, hostile shots stay red, and explosions/AI gunfire SFX match single-player.*
+*Includes all updates from `2026-11-27a` through `2026-11-27h`: station/inventory/fitting/contracts/missions (`b`), per-host `visitState` relog persistence + HUD speed (`c`), `G` dock/relog HUD fix (`d`), mining beam/rocks/host keepalive (`e`), 240 Hz stream/Hermite turn smoothing (`f`), paused-tab audio keepalive + fast cannon bolts (`g`), and full guest parity for F/N/missile locks, `J` route jump, rifts/instances/shared caches, wormholes, galaxy/shops & destination auto-clear (`h`).*
 
 *In 8b your keys made the host's hull move, but you were still flying in your own galaxy. In 8c your screen becomes the host's world: your ship is driven by what the host says, your own galaxy is frozen behind you, and you can go home to it.*
 
@@ -101,9 +101,38 @@
 
 **What to check:**
 
-- Guest's **place and sky return** to where it was before visiting — own galaxy stashed but not stepped, now restored.
-- Guest's ship is again **locally simulated** (flight, power, etc.) — W flies it locally.
+- Guest's **place and sky return** to where it was before visiting — own galaxy stashed but not stepped, now restored (including your own shops, wormholes, and route destination).
+- Guest's ship is again **locally simulated** (flight, power, etc.) — W flies it locally, and zero `_net` entities remain in any pocket.
 - No save change while visiting: `SAVE_VERSION` stays **29** (8c is runtime views only).
+
+## Part 7 — Station actions, fitting, contracts & story isolation (`2026-11-27b`–`d`)
+
+1. **Guest**: dock (**G**), move/split/stack items in Inventory, equip/unequip in Outfitting, buy/sell or buy a hull in Shipyard, accept a contract from Mission Board, and use a consumable from Cargo (**I**).
+2. Complete or advance the guest's contract; check host's HUD and missions.
+
+**What to check:**
+
+- All station drag/click/split/buy/equip/launch actions stick cleanly; ship speed reads `0 m/s` while docked and matches live forward/reverse/boost/warp speed in flight.
+- Guest mission spawns, kills, and HUD highlights stay isolated to the guest (host sees ambient kills without stealing guest mission ownership).
+- Disconnect abruptly or close guest tab, rejoin via the same link (**Bring my pilot**), and also test rejoining **while undocked**: guest keeps its per-host `visitState` (credits, ship, missions, board, pocket, and HUD/reticle).
+
+## Part 8 — Mining beam, asteroids, 240 Hz smoothing & background host (`2026-11-27e`–`g`)
+
+1. **Guest**: mine a ferrite rock with the mining beam, fire cannons at speed, and test on a high-refresh monitor if available.
+2. **Host**: open the **Pause** menu (**P**) and switch to another browser tab (even muted) while the guest flies and shoots.
+
+**What to check:**
+
+- Guest's mining beam renders cleanly, rock shrinks/depletes on both screens, `#bm` progress bar fills, and ore chimes play on gain (rock collisions work in remote pockets).
+- Guest's ship motion, camera boost shake/FOV, curved high-speed turns, and fast `900 m/s` cannon bolts glide smoothly without 24 Hz snapping or `1000 ms` pauses.
+- Switching tabs on the host (even with Pause open) does **not** stall the guest down to `1 Hz` updates.
+
+## Part 9 — Full guest parity: target locks, `J` route jump, rifts/caches, wormholes & starmap (`2026-11-27h`)
+
+1. **Targeting & missiles**: on guest, press **F** or pick an enemy/pilot in **N** list, and fire a missile; also verify neither pilot can missile-lock a docked pilot.
+2. **Starmap & route jump (`J`)**: open **M**, plot a multi-hop route to another system/pocket (e.g. `hollow`), close **M**, press **J** repeatedly to jump along the route, and test a blocked/invalid warp.
+3. **Rift & shared `CACHE`**: on guest, open/enter a rift (**R**), fight guardians, inspect the HUD countdown clock, open the unlocked cache (**R**), shift-click/move/take items, close the cache, and exit via the gate (plus check host cannot see guest's rift and dying in a rift recovers without breaking host's pocket).
+4. **Wormholes & galaxy**: confirm host's galaxy/shops/wormholes appear on guest while visiting, test a wormhole pocket, and verify reaching a plotted destination auto-clears the starmap destination marker (`place-changed`).
 
 ---
 

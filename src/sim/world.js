@@ -41,10 +41,19 @@ export function clearNetEntities() {
     const w = container?.entities;
     if (!w) continue;
     for (const e of [...(w.enemies || [])]) if (e?._net === true) dropEnemy(e, placeId);
-    for (const key of ["bullets", "missiles", "crates", "fx", "rifts", "gates", "caches"]) {
+    for (const key of ["bullets", "missiles", "crates", "fx", "rifts", "gates", "caches", "asteroids"]) {
       const list = w[key];
       if (!Array.isArray(list)) continue;
-      for (const item of [...list]) if (item?._net === true) dropEntity(list, item);
+      let removedNetRock = false;
+      for (const item of [...list]) {
+        if (item?._net === true) {
+          dropEntity(list, item);
+          if (key === "asteroids") removedNetRock = true;
+        }
+      }
+      // If a visited pocket replaced local rocks with host rocks (e.g. same place id as home),
+      // mark it unloaded so returning home regenerates local asteroids cleanly.
+      if (removedNetRock) container.loaded = false;
     }
   }
   state.otherPilots = [];
@@ -68,7 +77,7 @@ export function purgeNonNetEntities(placeId = state.place) {
   const w = placeWorld(placeId);
   if (!w) return;
   for (const e of [...(w.enemies || [])]) if (e && !e._net) dropEnemy(e, placeId);
-  for (const key of ["bullets", "missiles", "fx"]) {
+  for (const key of ["bullets", "missiles", "fx", "rifts", "gates", "caches"]) {
     const list = w[key];
     if (!Array.isArray(list)) continue;
     for (const item of [...list]) if (item && !item._net) dropEntity(list, item);

@@ -260,7 +260,7 @@ test("a token names one guest to one host, and the host never stores the token",
   assert.equal(record.tokenHash, hash);
   // `left` (playtest 14) is the "has gone home" mark on a record that is holding a pilot's
   // suitcase. It is still no secret: the list is what a host may store.
-  assert.deepEqual(Object.keys(record).sort(), ["bundle", "epoch", "lastSeen", "left", "name", "rev", "tokenHash"]);
+  assert.deepEqual(Object.keys(record).sort(), ["bundle", "epoch", "lastSeen", "left", "name", "rev", "tokenHash", "visitState"]);
 });
 
 test("the handshake refuses a version mismatch, the wrong world and a wrong token with a readable sentence", () => {

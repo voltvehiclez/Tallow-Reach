@@ -12,7 +12,7 @@ import { SHIP_STREAM } from "../data/multiplayer.js";
 import { enemyDef } from "../data/enemies.js";
 import { BULLET_COLOURS } from "../data/weapons.js";
 import { dropEnemy } from "../sim/enemy.js";
-import { dropEntity } from "../sim/entity.js";
+import { addEntity, dropEntity } from "../sim/entity.js";
 import { purgeNonNetEntities } from "../sim/world.js";
 
 const _qa = Q();
@@ -120,39 +120,128 @@ function cleanEnemy(raw) {
   return out;
 }
 
+function cleanRift(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = Math.floor(Number(raw.id) || 0);
+  if (id <= 0) return null;
+  const out = {
+    id,
+    pos: vec3(raw.pos),
+    quat: quat4(raw.quat),
+    n: typeof raw.n === "string" && raw.n ? raw.n : "Rift",
+    dest: typeof raw.dest === "string" ? raw.dest : "",
+    r: Number.isFinite(raw.r) && raw.r > 0 ? raw.r : 26,
+    spin: Number.isFinite(raw.spin) ? raw.spin : 0.35,
+  };
+  if (typeof raw.variant === "string" && raw.variant) out.variant = raw.variant;
+  if (typeof raw.instance === "string" && raw.instance) out.instance = raw.instance;
+  if (typeof raw.wormhole === "string" && raw.wormhole) out.wormhole = raw.wormhole;
+  if (typeof raw.template === "string" && raw.template) out.template = raw.template;
+  if (typeof raw.peer === "string" && raw.peer) out.peer = raw.peer;
+  if (raw.locked === true) out.locked = true;
+  if (raw.reentrant === true) out.reentrant = true;
+  return out;
+}
+
+function cleanGate(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = Math.floor(Number(raw.id) || 0);
+  if (id <= 0) return null;
+  const out = {
+    id,
+    pos: vec3(raw.pos),
+    quat: quat4(raw.quat),
+    n: typeof raw.n === "string" && raw.n ? raw.n : "Way out",
+    r: Number.isFinite(raw.r) && raw.r > 0 ? raw.r : 26,
+    spin: Number.isFinite(raw.spin) ? raw.spin : 0.35,
+    locked: raw.locked === true,
+    exit: raw.exit !== false,
+  };
+  if (typeof raw.variant === "string" && raw.variant) out.variant = raw.variant;
+  return out;
+}
+
+function cleanCache(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = Math.floor(Number(raw.id) || 0);
+  if (id <= 0) return null;
+  const out = {
+    id,
+    pos: vec3(raw.pos),
+    quat: quat4(raw.quat),
+    n: typeof raw.n === "string" && raw.n ? raw.n : "Cache",
+    r: Number.isFinite(raw.r) && raw.r > 0 ? raw.r : 10,
+    spin: Number.isFinite(raw.spin) ? raw.spin : 0.35,
+    locked: raw.locked !== false,
+  };
+  if (typeof raw.loot === "string" && raw.loot) out.loot = raw.loot;
+  return out;
+}
+
 const cleanList = (arr, fn) => (Array.isArray(arr) ? arr.map(fn).filter(Boolean) : []);
 
 /**
  * Snapshot ring buffer for one guest screen's visited pockets.
  */
-export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM } = {}) {
+export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM, paceMs = 0 } = {}) {
   const delay = Number.isFinite(delayMs) ? delayMs : 50;
   const keep = Math.max(2, Math.floor(Number.isFinite(samples) ? samples : 8));
   const stale = Number.isFinite(staleMs) ? staleMs : SHIP_STREAM.staleMs;
   const snap = Number.isFinite(snapM) ? snapM : SHIP_STREAM.snapM;
   const snapSq = snap * snap;
+  const pace = Number.isFinite(paceMs) && paceMs > 0 ? paceMs : 0;
 
   const byPlace = new Map();
+
+  function paceTimestamp(record, rawAt) {
+    if (!pace) return rawAt;
+    if (!record.prevRawAt || rawAt - record.prevRawAt > pace * 3 || rawAt < record.prevRawAt - pace) {
+      record.prevRawAt = rawAt;
+      record.pacedAt = rawAt;
+      return rawAt;
+    }
+    if (rawAt <= record.prevRawAt) return record.pacedAt;
+    const sincePaced = rawAt - record.pacedAt;
+    let next;
+    if (sincePaced < pace * 0.45) {
+      next = Math.max(record.pacedAt + 1, rawAt);
+    } else {
+      const steps = Math.max(1, Math.round(sincePaced / pace - 0.25));
+      const expected = record.pacedAt + steps * pace;
+      const err = rawAt - expected;
+      const maxLag = Math.min(28, delay * 0.28);
+      next = expected + err * 0.15;
+      next = Math.max(next, rawAt - maxLag);
+      next = Math.min(next, rawAt + 8);
+      if (next <= record.pacedAt) next = record.pacedAt + 1;
+    }
+    record.prevRawAt = rawAt;
+    record.pacedAt = next;
+    return next;
+  }
 
   function receive(packet, at = Date.now()) {
     if (!packet || typeof packet !== "object" || !Number.isFinite(at)) return 0;
     const place = typeof packet.place === "string" ? packet.place.trim() : "";
     if (!place) return 0;
+    const record = byPlace.get(place) || { frames: [], lastAt: 0, prevRawAt: 0, pacedAt: 0 };
     const frame = {
-      at,
+      at: paceTimestamp(record, at),
       place,
       bullets: cleanList(packet.bullets, cleanBullet),
       missiles: cleanList(packet.missiles, cleanMissile),
       crates: cleanList(packet.crates, cleanCrate),
       fx: cleanList(packet.fx, cleanFx),
       enemies: cleanList(packet.enemies, cleanEnemy),
+      rifts: cleanList(packet.rifts, cleanRift),
+      gates: cleanList(packet.gates, cleanGate),
+      caches: cleanList(packet.caches, cleanCache),
     };
-    const record = byPlace.get(place) || { frames: [], lastAt: 0 };
     const last = record.frames[record.frames.length - 1];
     if (last && last.at >= frame.at) record.frames[record.frames.length - 1] = frame;
     else record.frames.push(frame);
     while (record.frames.length > keep) record.frames.shift();
-    record.lastAt = Math.max(record.lastAt, frame.at);
+    record.lastAt = Math.max(record.lastAt, at);
     byPlace.set(place, record);
     return record.frames.length;
   }
@@ -224,6 +313,21 @@ export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM }
         quat: slerp4(ai.quat, bi.quat, k),
         v: lerp3(ai.v, bi.v, k),
       })),
+      rifts: interpItems(a.rifts || [], b.rifts || [], t, (ai, bi, k) => ({
+        ...bi,
+        pos: lerp3(ai.pos, bi.pos, k),
+        quat: slerp4(ai.quat, bi.quat, k),
+      })),
+      gates: interpItems(a.gates || [], b.gates || [], t, (ai, bi, k) => ({
+        ...bi,
+        pos: lerp3(ai.pos, bi.pos, k),
+        quat: slerp4(ai.quat, bi.quat, k),
+      })),
+      caches: interpItems(a.caches || [], b.caches || [], t, (ai, bi, k) => ({
+        ...bi,
+        pos: lerp3(ai.pos, bi.pos, k),
+        quat: slerp4(ai.quat, bi.quat, k),
+      })),
     };
   }
 
@@ -241,7 +345,7 @@ export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM }
 /** True when a world record already holds any `_net` entity (used for immediate first-packet sync). */
 export function hasNetEntities(W) {
   if (!W) return false;
-  for (const key of ["enemies", "bullets", "missiles", "crates", "fx"]) {
+  for (const key of ["enemies", "bullets", "missiles", "crates", "fx", "rifts", "gates", "caches"]) {
     if (Array.isArray(W[key]) && W[key].some(r => r && r._net === true)) return true;
   }
   return false;
@@ -391,6 +495,182 @@ export function syncPocketEntities(W, snapshot, place) {
       rec.v.set(Number(raw.v?.[0]) || 0, Number(raw.v?.[1]) || 0, Number(raw.v?.[2]) || 0);
     },
   );
+
+  syncList(
+    W.rifts,
+    snapshot.rifts,
+    "rift",
+    (id, raw) => ({
+      id,
+      kind: "rift",
+      place,
+      n: raw.n || "Rift",
+      dest: raw.dest || "",
+      variant: raw.variant || "",
+      instance: raw.instance || "",
+      wormhole: raw.wormhole || "",
+      template: raw.template || "",
+      peer: raw.peer || "",
+      locked: raw.locked === true,
+      reentrant: raw.reentrant === true,
+      r: raw.r || 26,
+      spin: raw.spin ?? 0.35,
+      pos: V(),
+      quat: Q(),
+      _net: true,
+    }),
+    (rec, raw) => {
+      rec.place = place;
+      rec.n = raw.n || "Rift";
+      rec.dest = raw.dest || "";
+      rec.variant = raw.variant || "";
+      rec.instance = raw.instance || "";
+      rec.wormhole = raw.wormhole || "";
+      rec.template = raw.template || "";
+      rec.peer = raw.peer || "";
+      rec.locked = raw.locked === true;
+      rec.reentrant = raw.reentrant === true;
+      rec.r = raw.r || 26;
+      rec.spin = raw.spin ?? 0.35;
+    },
+  );
+
+  syncList(
+    W.gates,
+    snapshot.gates,
+    "gate",
+    (id, raw) => ({
+      id,
+      kind: "gate",
+      place,
+      n: raw.n || "Way out",
+      variant: raw.variant || "",
+      locked: raw.locked === true,
+      exit: raw.exit !== false,
+      r: raw.r || 26,
+      spin: raw.spin ?? 0.35,
+      pos: V(),
+      quat: Q(),
+      _net: true,
+    }),
+    (rec, raw) => {
+      rec.place = place;
+      rec.n = raw.n || "Way out";
+      rec.variant = raw.variant || "";
+      rec.locked = raw.locked === true;
+      rec.exit = raw.exit !== false;
+      rec.r = raw.r || 26;
+      rec.spin = raw.spin ?? 0.35;
+    },
+  );
+
+  syncList(
+    W.caches,
+    snapshot.caches,
+    "cache",
+    (id, raw) => ({
+      id,
+      kind: "cache",
+      place,
+      n: raw.n || "Cache",
+      loot: raw.loot || "",
+      locked: raw.locked !== false,
+      r: raw.r || 10,
+      spin: raw.spin ?? 0.35,
+      pos: V(),
+      quat: Q(),
+      _net: true,
+    }),
+    (rec, raw) => {
+      rec.place = place;
+      rec.n = raw.n || "Cache";
+      rec.loot = raw.loot || "";
+      rec.locked = raw.locked !== false;
+      rec.r = raw.r || 10;
+      rec.spin = raw.spin ?? 0.35;
+    },
+  );
+}
+
+/**
+ * Synchronise a visited pocket's asteroid field against host-authoritative rock snapshots.
+ * Existing matching rocks (by `_hostId`, or on first arrival by local type/position match)
+ * update their scale and ore in place so Three.js meshes shrink smoothly without rebuilding.
+ */
+export function syncPocketRocks(W, rocks, place) {
+  if (!W || !Array.isArray(rocks) || !place) return;
+  const list = W.asteroids || (W.asteroids = []);
+  const byHostId = new Map();
+  for (const r of list) {
+    if (r && r._net === true && r._hostId > 0) byHostId.set(r._hostId, r);
+  }
+  const seen = new Set();
+  for (const raw of rocks) {
+    if (!raw || typeof raw !== "object") continue;
+    const hostId = Math.floor(Number(raw.id) || 0);
+    if (hostId <= 0) continue;
+    seen.add(hostId);
+    const px = Number(raw.pos?.[0]) || 0;
+    const py = Number(raw.pos?.[1]) || 0;
+    const pz = Number(raw.pos?.[2]) || 0;
+    const type = typeof raw.type === "string" && raw.type ? raw.type : "ferrite";
+    let rec = byHostId.get(hostId);
+    if (!rec) {
+      rec = list.find(r =>
+        r && !r._net && r.type === type &&
+        Math.abs((r.pos?.x ?? 0) - px) < 0.25 &&
+        Math.abs((r.pos?.y ?? 0) - py) < 0.25 &&
+        Math.abs((r.pos?.z ?? 0) - pz) < 0.25
+      ) || null;
+      if (rec) {
+        rec._net = true;
+        rec._hostId = hostId;
+        byHostId.set(hostId, rec);
+      }
+    }
+    const q = quat4(raw.quat);
+    const sx0 = Number(raw.s0?.[0]) || Number(raw.r) || 10;
+    const sy0 = Number(raw.s0?.[1]) || Number(raw.r) || 10;
+    const sz0 = Number(raw.s0?.[2]) || Number(raw.r) || 10;
+    const scx = Number(raw.scale?.[0]) || sx0;
+    const scy = Number(raw.scale?.[1]) || sy0;
+    const scz = Number(raw.scale?.[2]) || sz0;
+    const ore = Math.max(0, Number(raw.ore) || 0);
+    const max = Math.max(0.01, Number(raw.max) || ore || 1);
+    const radius = Math.max(1, Number(raw.r) || 10);
+    const shape = Math.max(0, Math.floor(Number(raw.shape) || 0));
+    if (rec) {
+      rec.place = place;
+      rec.type = type;
+      rec.shape = shape;
+      rec.r = radius;
+      rec.ore = ore;
+      rec.max = max;
+      rec.pos.set(px, py, pz);
+      rec.quat.set(q[0], q[1], q[2], q[3]);
+      if (rec.s0) rec.s0.set(sx0, sy0, sz0); else rec.s0 = V(sx0, sy0, sz0);
+      if (rec.scale) rec.scale.set(scx, scy, scz); else rec.scale = V(scx, scy, scz);
+    } else {
+      addEntity(list, {
+        kind: "rock",
+        place,
+        type,
+        shape,
+        r: radius,
+        ore,
+        max,
+        pos: V(px, py, pz),
+        quat: Q(q[0], q[1], q[2], q[3]),
+        s0: V(sx0, sy0, sz0),
+        scale: V(scx, scy, scz),
+        _net: true,
+        _hostId: hostId,
+      });
+    }
+  }
+  for (const rec of [...list]) {
+    if (!rec || !rec._net || !seen.has(rec._hostId)) dropEntity(list, rec);
+  }
 }
 
 /**

@@ -76,9 +76,9 @@ export function updateMissileFlight(dt, placeId = state.place) {
     if (s.t && W.enemies.includes(s.t)) {
       steerPos = enemyPos(s.t);
       steerVel = enemyVel(s.t);
-    } else if (s.t && s.t.pos && typeof s.t.pos.x === "number" && !s.t.dead) {
+    } else if (s.t && s.t.pos && typeof s.t.pos.x === "number" && !s.t.dead && !s.t.docked) {
       // Pilot target (otherPilotsThere reference) — pos is interpolated render pose, v is lead velocity
-      // Verify still present in this place via otherPilotsThere or state.players
+      // Verify still present in this place via otherPilots or state.players
       const stillThere = state.players.includes(s.t) || (state.otherPilots || []).includes(s.t);
       if (stillThere && (s.t.place || state.place) === placeId) {
         steerPos = s.t.pos;

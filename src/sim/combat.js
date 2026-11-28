@@ -17,7 +17,7 @@ import { itemName } from "../data/items.js";
 import { placeAt } from "../data/places.js";
 import { shipDef } from "../data/ships.js";
 import { enemyDef } from "../data/enemies.js";
-import { state, msg, say, localPlayer, profileOf, placeWorld, ownerOf, playerByOwner, worldByOwner } from "../state/state.js";
+import { state, msg, sayForPlayer, localPlayer, profileOf, placeWorld, ownerOf, playerByOwner, worldByOwner } from "../state/state.js";
 import { dropEnemy, enemyPos } from "./enemy.js";
 import { holdLoad } from "./economy.js";
 import { addItem } from "./inventory.js";
@@ -472,7 +472,7 @@ export function updateCrates(dt, placeId = state.place) {
       const k = c.item,
         local = p === state.player;
       if (holdLoad(prof) >= shipDef(prof.ship).cargo || !addItem(prof.ship, k, 1, prof)) {
-        if (local) say("Cargo hold full");
+        sayForPlayer(p, "Cargo hold full", 0.25);
       } else {
         // Remove it before announcing pickup so a place-memory listener can see
         // whether this was the encounter's last crate. Mission records keep a

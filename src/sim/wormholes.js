@@ -277,22 +277,22 @@ function dropDoor(record) {
 /* Fading, despawning and being done with it                                   */
 /* ------------------------------------------------------------------------- */
 
-/** Is the local pilot (or a warp in flight) in or headed for this pocket or its instance? */
+/** Is any live pilot (or a warp in flight) in or headed for this pocket or its instance? */
 function pocketOccupied(record) {
-  const P = localPlayer();
-  if (!P) return false;
-  const here = P.place || state.place;
-  if (here === record.id) return true;
-  if (here === record.instanceId) return true;
-  if (P.warp && P.warp.to === record.id) return true;
+  for (const P of state.players) {
+    if (!P) continue;
+    const here = P.place || state.place;
+    if (here === record.id || here === record.instanceId) return true;
+    if (P.warp && P.warp.to === record.id) return true;
+  }
   return false;
 }
 
 /**
  * The wormhole fades: the way in goes, the instance stays open and its Stable wormhole way out
- * keeps working (never a `kill`). The pocket stays on the map only while somebody is in it — the
- * local pilot in the pocket, in its instance, or warping towards it — and despawns at once when
- * nobody is. A replacement pops up somewhere in the universe either way (owner, 2026-11-14).
+ * keeps working (never a `kill`). The pocket stays on the map only while somebody is in it — any
+ * pilot in the pocket, in its instance, or warping towards it — and despawns at once when nobody
+ * is. A replacement pops up somewhere in the universe either way (owner, 2026-11-14).
  */
 export function doomWormhole(record, { quiet = false } = {}) {
   if (!record || record.doomed) return false;
@@ -303,6 +303,14 @@ export function doomWormhole(record, { quiet = false } = {}) {
   const inSameSystem = P && !P.docked && !P.dead &&
     (state.galaxy?.pocketsById?.[P.place || state.place]?.parent === record.parent);
   if (!quiet && inSameSystem) msg("The Simple Wormhole collapses.", 6);
+  if (!quiet) {
+    for (const gp of state.players) {
+      if (!gp || !gp.guestId || gp.docked || gp.dead) continue;
+      if (state.galaxy?.pocketsById?.[gp.place || state.place]?.parent === record.parent) {
+        emit("mp-place-notice", { guestId: gp.guestId, place: gp.place, text: "The Simple Wormhole collapses." });
+      }
+    }
+  }
   emit("wormhole-collapsed", { id: record.id, parent: record.parent, template: record.template });
   // A fresh wormhole takes the faded one's place somewhere in the universe.
   topUpWormholes();
@@ -324,7 +332,7 @@ export function removeWormhole(record) {
   state.wormholes.delete(record.id);
   state.places.delete(record.id);
   const instance = record.instanceId ? instanceAt(record.instanceId) : null;
-  if (instance && !(localPlayer() && (localPlayer().place || state.place) === instance.id)) {
+  if (instance && !state.players.some(p => p && (p.place || state.place) === instance.id)) {
     destroyInstance(instance, "expiry");
   }
   emit("wormhole-gone", { id: record.id, parent: record.parent });
@@ -395,8 +403,8 @@ export function registerWormholePlaces(rawWorld, galaxy = state.galaxy) {
  * Call it **after** `applySave` (it reads `world.wormholes` and `world.place`) and before anything
  * enters a pocket. Returns how many wormholes hang in the universe.
  */
-export function restoreWormholes() {
-  if (restoredWorld && restoredWorld === state.worldState) return state.wormholes.size;
+export function restoreWormholes(force = false) {
+  if (!force && restoredWorld && restoredWorld === state.worldState) return state.wormholes.size;
   // A load never keeps the wormholes of the save it replaces.
   const stale = [...state.wormholes.keys()];
   clearWormholes();
@@ -436,6 +444,47 @@ export function restoreWormholes() {
   }
   restoreConnectionDoors();
   restoredWorld = state.worldState;
+  return state.wormholes.size;
+}
+
+/**
+ * Synchronise a visiting guest's wormhole pockets against the host's snapshot without
+ * spawning extra local wormholes (the host owns spawning and expiry).
+ */
+export function syncGuestWormholes(list = []) {
+  restoredWorld = null;
+  for (const prev of [...state.wormholes.values()]) {
+    if (!prev) continue;
+    galaxyEject(prev);
+    unregisterWormholePlace(prev.id);
+    state.places.delete(prev.id);
+  }
+  clearWormholes();
+  const entries = Array.isArray(list) ? list : [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = typeof entry.id === "string" ? entry.id : "";
+    const parent = typeof entry.parent === "string" ? entry.parent : "";
+    const template = typeof entry.template === "string" ? entry.template : "";
+    const seed = (Number(entry.seed) >>> 0) || 0;
+    const instanceId = template ? instanceIdFor(template, seed) : "";
+    if (!id || !parent || !instanceId || !state.galaxy?.systemsById?.[parent]) continue;
+    const record = {
+      id,
+      parent,
+      template,
+      seed,
+      tier: Math.max(1, Number(entry.tier) || 1),
+      lifetime: Math.max(0, Number(entry.lifetime) || 0),
+      totalLifetime: Math.max(0, Number(entry.totalLifetime) || 0),
+      doomed: entry.doomed === true,
+      instanceId,
+    };
+    state.wormholes.set(id, record);
+    galaxyInject(record);
+    registerWormholePlace(pocketRecord(record));
+  }
+  if (state.worldState) state.worldState.wormholes = JSON.parse(JSON.stringify(entries));
   return state.wormholes.size;
 }
 

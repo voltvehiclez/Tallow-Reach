@@ -42,8 +42,21 @@ const isCache = where => where === CACHE;
  * place in the world and not part of anybody's profile — exactly like `state.place` deciding which
  * station `STATION` is.
  */
-function cacheRecord() {
-  const record = state.instances.get(state.place);
+function cacheOwnerPlace(profile = state.profile, world = state.worldState) {
+  if (world && world !== state.worldState) {
+    const owner = (state.players || []).find(p => p && (p.guestWorld === world || p.profile === profile));
+    if (owner) return owner.place || world.place || state.place;
+    return world.place || state.place;
+  }
+  if (profile && profile !== state.profile) {
+    const owner = (state.players || []).find(p => p && p.profile === profile);
+    if (owner) return owner.place || state.place;
+  }
+  return state.place;
+}
+
+function cacheRecord(profile = state.profile, world = state.worldState) {
+  const record = state.instances.get(cacheOwnerPlace(profile, world));
   return record && record.cache && record.cache.open ? record : null;
 }
 
@@ -76,7 +89,7 @@ export function stationStock(world = state.worldState, placeId = null) {
 /** What a place keeps: `{ itemId: count }`, made on first use. */
 export function stockOf(where, profile = state.profile, world = state.worldState) {
   if (isStation(where)) return stationStock(world);
-  if (isCache(where)) return cacheRecord()?.cache.stock || newStock();
+  if (isCache(where)) return cacheRecord(profile, world)?.cache.stock || newStock();
   const holds = profile.holds || (profile.holds = {});
   return holds[where] || (holds[where] = newStock());
 }
@@ -91,7 +104,7 @@ export const holdOf = (id, profile = state.profile) => stockOf(id ?? profile.shi
  */
 export function capacityOf(where, profile = state.profile, world = state.worldState) {
   if (isStation(where)) return STORAGE_PER_LEVEL * world.base.store;
-  if (isCache(where)) return cacheRecord() ? Infinity : 0;
+  if (isCache(where)) return cacheRecord(profile, world) ? Infinity : 0;
   return shipDef(where)?.cargo || 0;
 }
 
@@ -141,9 +154,9 @@ export const hasRoomFor = (where, id, n = 1, profile = state.profile, world = st
   n > 0 && spaceFor(where, id, profile, world) >= n;
 
 /** The place's name for messages. */
-export function nameOf(where) {
+export function nameOf(where, profile = state.profile, world = state.worldState) {
   if (isStation(where)) return "the station";
-  if (isCache(where)) return `the ${(cacheRecord()?.cache.n || "cache").toLowerCase()}`;
+  if (isCache(where)) return `the ${(cacheRecord(profile, world)?.cache.n || "cache").toLowerCase()}`;
   return `the ${shipName(where)}`;
 }
 
@@ -189,7 +202,7 @@ function readRawSlots(where, profile = state.profile, world = state.worldState) 
     const key = currentStationKey(world);
     return world?.stationSlots?.[key] || null;
   }
-  if (isCache(where)) return cacheRecord()?.cache.slots || null;
+  if (isCache(where)) return cacheRecord(profile, world)?.cache.slots || null;
   return profile?.holdSlots?.[where] || null;
 }
 
@@ -203,7 +216,7 @@ function writeRawSlots(where, list, profile = state.profile, world = state.world
     return clean;
   }
   if (isCache(where)) {
-    const rec = cacheRecord();
+    const rec = cacheRecord(profile, world);
     if (rec?.cache) {
       if (clean.length) rec.cache.slots = clean;
       else delete rec.cache.slots;
@@ -290,8 +303,8 @@ function originMeta(where, slot, id, n, profile = state.profile, world = state.w
     return { kind: "station", where, slot, id, n, stationKey: currentStationKey(world), ship: profile?.ship || null, instanceId: null };
   }
   if (isCache(where)) {
-    const rec = cacheRecord();
-    return { kind: "cache", where, slot, id, n, stationKey: null, ship: profile?.ship || null, instanceId: rec?.id || state.place };
+    const rec = cacheRecord(profile, world);
+    return { kind: "cache", where, slot, id, n, stationKey: null, ship: profile?.ship || null, instanceId: rec?.id || cacheOwnerPlace(profile, world) };
   }
   return { kind: "ship", where, slot, id, n, stationKey: null, ship: where, instanceId: null };
 }
@@ -443,8 +456,8 @@ export function placeHeldStack(
     if (!(put > 0)) {
       const capHit = countOf(toWhere, held.id, profile, world) >= itemStack(held.id);
       const message = capHit
-        ? `Cannot stack any more ${itemName(held.id)} in ${nameOf(toWhere)}.`
-        : `No room in ${nameOf(toWhere)}.`;
+        ? `Cannot stack any more ${itemName(held.id)} in ${nameOf(toWhere, profile, world)}.`
+        : `No room in ${nameOf(toWhere, profile, world)}.`;
       return { ok: false, moved: 0, swapped: false, held, message };
     }
     list[idx] = [held.id, (dest ? dest[1] : 0) + put];
@@ -452,7 +465,7 @@ export function placeHeldStack(
     const rem = held.n - put;
     const nextHeld = rem > 0 ? { ...held, n: rem } : null;
     const message = !one && rem > 0
-      ? `Placed ${put} ${itemName(held.id)} in ${nameOf(toWhere)} (${rem} still held).`
+      ? `Placed ${put} ${itemName(held.id)} in ${nameOf(toWhere, profile, world)} (${rem} still held).`
       : "";
     return { ok: true, moved: put, swapped: false, held: nextHeld, message };
   }
@@ -466,7 +479,7 @@ export function placeHeldStack(
   const currentLoad = loadOf(toWhere, profile, world);
   const nextLoad = currentLoad - destN * (itemVol(destId) || 0) + held.n * (itemVol(held.id) || 0);
   if (nextLoad > cap + 1e-9) {
-    return { ok: false, moved: 0, swapped: false, held, message: `No room in ${nameOf(toWhere)}.` };
+    return { ok: false, moved: 0, swapped: false, held, message: `No room in ${nameOf(toWhere, profile, world)}.` };
   }
   if (countOf(toWhere, held.id, profile, world) + held.n > itemStack(held.id)) {
     return {
@@ -474,7 +487,7 @@ export function placeHeldStack(
       moved: 0,
       swapped: false,
       held,
-      message: `Cannot stack any more ${itemName(held.id)} in ${nameOf(toWhere)}.`,
+      message: `Cannot stack any more ${itemName(held.id)} in ${nameOf(toWhere, profile, world)}.`,
     };
   }
   const stock = stockOf(toWhere, profile, world);
@@ -544,7 +557,7 @@ export function returnHeldStack(held, profile = state.profile, world = state.wor
       restoreInto(STATION, held.slot);
     }
   } else if (held.kind === "cache") {
-    if (cacheRecord()) restoreInto(CACHE, held.slot);
+    if (cacheRecord(profile, world)) restoreInto(CACHE, held.slot);
     if (rem > 0 && held.instanceId) {
       const rec = state.instances.get(held.instanceId);
       if (rec?.cache?.stock) {
@@ -588,7 +601,7 @@ export function shiftMoveSlot(from, slotIndex, to, profile = state.profile, worl
   const [id, have] = slot;
   const count = Math.min(have, spaceFor(to, id, profile, world));
   if (!(count > 0)) {
-    return { ok: false, id, moved: 0, message: `No room in ${nameOf(to)}.` };
+    return { ok: false, id, moved: 0, message: `No room in ${nameOf(to, profile, world)}.` };
   }
   const toList = ensureSlotList(to, profile, world).map(s => (s ? [s[0], s[1]] : null));
   takeItem(from, id, count, profile, world);
@@ -603,7 +616,7 @@ export function shiftMoveSlot(from, slotIndex, to, profile = state.profile, worl
     ok: true,
     id,
     moved: count,
-    message: `Moved ${count} ${itemName(id)} to ${nameOf(to)}.`,
+    message: `Moved ${count} ${itemName(id)} to ${nameOf(to, profile, world)}.`,
   };
 }
 
@@ -636,7 +649,7 @@ export function stackAll(where, profile = state.profile, world = state.worldStat
   writeRawSlots(where, next, profile, world);
   return {
     changed,
-    message: changed ? `Stacked all items in ${nameOf(where)}.` : "All items are already stacked.",
+    message: changed ? `Stacked all items in ${nameOf(where, profile, world)}.` : "All items are already stacked.",
   };
 }
 
@@ -651,7 +664,7 @@ export function discardItem(where, id, n = Infinity, profile = state.profile, wo
     ? takeItemFromSlot(where, slotIndex, id, n, profile, world)
     : takeItem(where, id, n, profile, world);
   if (!(count > 0)) return `No ${itemName(id)} to discard.`;
-  return `Discarded ${count} ${itemName(id)} from ${nameOf(where)}.`;
+  return `Discarded ${count} ${itemName(id)} from ${nameOf(where, profile, world)}.`;
 }
 
 /**
@@ -680,11 +693,11 @@ export function moveItem(from, to, id, n = Infinity, profile = state.profile, wo
   const have = countOf(from, id, profile, world);
   const count = Math.min(n, have, spaceFor(to, id, profile, world));
   if (!(count > 0)) {
-    return have <= 0 ? `No ${itemName(id)} to move.` : `No room in ${nameOf(to)}.`;
+    return have <= 0 ? `No ${itemName(id)} to move.` : `No room in ${nameOf(to, profile, world)}.`;
   }
   takeItem(from, id, count, profile, world);
   addItem(to, id, count, profile, world);
-  return `Moved ${count} ${itemName(id)} to ${nameOf(to)}.`;
+  return `Moved ${count} ${itemName(id)} to ${nameOf(to, profile, world)}.`;
 }
 
 /**
@@ -705,7 +718,7 @@ export function buyItem(
   const total = price * count;
   if (profile.cr < total) return "Not enough credits.";
   if (!hasRoomFor(where, id, count, profile, world)) {
-    return `No room in ${nameOf(where)} for the ${itemName(id)}.`;
+    return `No room in ${nameOf(where, profile, world)} for the ${itemName(id)}.`;
   }
   profile.cr -= total;
   addItem(where, id, count, profile, world);

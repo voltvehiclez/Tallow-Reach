@@ -36,21 +36,23 @@
 
 import { emit } from "../util/events.js";
 import { state } from "../state/state.js";
+import { cleanVisitState } from "../state/profile.js";
 import { createPlayerRecord } from "./player.js";
-import { configurePlayer } from "./session.js";
+import { configurePlayer, applyResumePlacement } from "./session.js";
 import { CONTROLS } from "../data/multiplayer.js";
-import { stationAt } from "./places.js";
-import { isPocket, DEFAULT_PLACE } from "../data/places.js";
+import { stationAt, enterPlace } from "./places.js";
+import { isPocket, isInstancePlace, isWormholePlace, DEFAULT_PLACE } from "../data/places.js";
 import { neutralControls } from "../state/controls.js";
 import {
   cancelGuestHeld,
   createGuestWorld,
   guestLockerSnapshot,
   guestProfileSnapshot,
+  guestVisitStateSnapshot,
   runGuestAction,
 } from "./guest-actions.js";
 
-export { cancelGuestHeld, guestLockerSnapshot, guestProfileSnapshot };
+export { cancelGuestHeld, guestLockerSnapshot, guestProfileSnapshot, guestVisitStateSnapshot };
 
 /** The visiting pilots this world is holding, by guest id. Runtime only, never saved. */
 const guests = new Map();
@@ -79,13 +81,23 @@ export function arrivalPlace(profile = null, requested = null) {
   return DEFAULT_PLACE;
 }
 
+/** True when a host pocket/instance/wormhole id currently exists for a guest to resume in. */
+function isValidGuestPlace(placeId) {
+  if (typeof placeId !== "string" || !placeId) return false;
+  if (isInstancePlace(placeId)) return state.instances.has(placeId);
+  if (!isPocket(placeId)) return false;
+  if (isWormholePlace(placeId)) return state.wormholes.has(placeId);
+  return true;
+}
+
 /**
- * A visitor's ship exists in this world, docked at `place`.
+ * A visitor's ship exists in this world, placed either at its saved host-world
+ * position/station (`visitState`) or docked at `arrivalPlace(profile, place)`.
  *
  * Returns the record. Refuses (and says so) rather than throwing: a bad suitcase must
  * cost the guest its visit, never the host's game.
  */
-export function arriveGuest({ guestId, name = "", profile = null, place = null, lockers = [] } = {}) {
+export function arriveGuest({ guestId, name = "", profile = null, place = null, lockers = [], visitState = null } = {}) {
   const id = typeof guestId === "string" ? guestId.trim() : "";
   if (!id) return null;
   if (!profile || typeof profile !== "object") return null;
@@ -93,24 +105,27 @@ export function arriveGuest({ guestId, name = "", profile = null, place = null, 
   // second ship (slice 5 handles a newer connection kicking an older one properly).
   if (guests.has(id)) leaveGuest(id);
 
+  const saved = cleanVisitState(visitState);
+  let targetPlace = arrivalPlace(profile, place);
+  let savedResume = null;
+  if (saved && isValidGuestPlace(saved.place)) {
+    if (saved.resume || stationAt(saved.place)) {
+      targetPlace = saved.place;
+      savedResume = saved.resume;
+    }
+  }
+
   const P = createPlayerRecord(neutralControls());
   P.kind = "ship";
   P.guestId = id;
   P.name = String(name || "").slice(0, 40);
-  P.place = arrivalPlace(profile, place);
+  P.place = targetPlace;
   // Per-visitor persistent world/station storage, boards and drop state (never shared with the host).
-  const seeded = createGuestWorld(P.place, lockers);
+  const seeded = createGuestWorld(targetPlace, lockers, saved);
   P.guestWorld = seeded.world;
   P.guestLockerOrigins = seeded.origins;
   P.guestUnknownLockers = seeded.unknownLockers;
   P.guestHeld = null;
-  // Docked, with the station's own launch point as its position, so a snapshot has
-  // somewhere sane to be even before the guest undocks.
-  const station = stationAt(P.place);
-  if (station?.launch?.pos) P.pos.set(...station.launch.pos);
-  P.docked = true;
-  P.thr = 0;
-  P.v.set(0, 0, 0);
 
   try {
     configurePlayer(P, profile);
@@ -123,8 +138,24 @@ export function arriveGuest({ guestId, name = "", profile = null, place = null, 
 
   guests.set(id, { player: P, name: P.name });
   state.players.push(P);
+  // Enter the pocket after `P` is in `state.players` and configured so
+  // `restoreAllMissionDrops` and `place-entered` mission listeners see `P.profile` & `P.guestWorld`.
+  P.place = null;
+  if (!enterPlace(targetPlace, P)) {
+    P.place = targetPlace;
+    if (P.guestWorld) P.guestWorld.place = targetPlace;
+  }
+  applyResumePlacement(P, P.profile, P.place || targetPlace, savedResume, {
+    dockedPosFromLaunch: true,
+    topUpSalvage: true,
+  });
+
   emit("mp-guest-arrived", { player: P, guestId: id, name: P.name, place: P.place });
-  emit("mp-notice", `${P.name || "A pilot"} arrived at ${stationAt(P.place)?.n || P.place}.`);
+  const hereStation = stationAt(P.place);
+  const whereLabel = hereStation?.n || P.place;
+  emit("mp-notice", P.docked
+    ? `${P.name || "A pilot"} arrived at ${whereLabel}.`
+    : `${P.name || "A pilot"} resumed in ${whereLabel}.`);
   return P;
 }
 
@@ -143,6 +174,7 @@ export function leaveGuest(guestId) {
   const entry = guests.get(id);
   if (!entry) return false;
   cancelGuestHeld(entry.player);
+  if (entry.player) entry.player.openCacheId = null;
   guests.delete(id);
   const at = state.players.indexOf(entry.player);
   if (at >= 0) state.players.splice(at, 1);

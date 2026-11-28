@@ -48,7 +48,6 @@ export function stepSim(dt) {
   // weapon/visual half for the local pocket only; world systems (enemies, rifts, wormholes,
   // contracts, place memory) stay frozen.
   if (isGuest()) {
-    if (state.hud) state.hud.prompt = "";
     // Guest does not simulate its own galaxy; host is authoritative for all world effects.
     // Bullets/missiles/crates/fx for the visited pocket are synced via mp-entities.
     // Local cosmetic is disabled to avoid duplicate host-confirmed projectiles.
@@ -66,6 +65,11 @@ export function stepSim(dt) {
   // A hint lasts until the next sim tick, not just a display frame. This keeps
   // it visible when a display renders more than once between sim ticks.
   state.hud.prompt = "";
+  for (const p of state.players) {
+    if (p && p !== state.player && (p.hudPromptUntil || 0) <= state.time) {
+      p.hudPrompt = "";
+    }
+  }
   // Local first preserves the old single-player ordering. Other players have
   // independent per-ship runtime; shared world systems are stepped exactly once.
   const local = state.player;

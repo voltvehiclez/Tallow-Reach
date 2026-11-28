@@ -1,7 +1,95 @@
-# Lessons archive: L37–L41 (multiplayer custody & menu navigation)
+# Lessons archive: L35–L47 (multiplayer custody, rejoin, UI & menu navigation)
 
 Moved out of [docs/LESSONS.md](../LESSONS.md) verbatim on 2026-11-27 to keep it under its size limit.
 Read them when a task touches multiplayer suitcase custody (`checkIn`/`bringPilotHomeAtMenu`), away-card routing, or post-join modal visibility.
+
+### L47. An invitation is not an identity
+- **Seen (owner, playtest 22):** *"If a second guest player joins, first guest is kicked out … the first
+  guest is never really able to rejoin."* One friend could visit; the second took the first one's place,
+  and the one thrown out then met *"That link has already been used, or it was copied wrongly"*.
+- **Cause:** a join link carries **one** secret per world (`?join=<worldId>#<token>`), and the guest used
+  that secret as **its own**: `guestId = guest-<token.slice(0,8)>`, `hello.token = linkToken`. Every friend
+  on one link arrived as the same pilot, so the host's one-window-per-pilot rule (correct code) retired the
+  first to make room, rewrote the record's hash, and left the retired browser holding a secret that no
+  longer matched. The symptom named the wrong object entirely.
+- **Rule:** a credential the *sender* hands out is never the identity of the *receiver*. Identity is minted
+  where the pilot lives (here `tr_mp.pilotToken`, one per browser) and sent every time; the invitation only
+  decides *where* it may be used. "Same person?" and "allowed in?" are two questions, and one shared secret
+  cannot answer both.
+- **A cap is a different bug from a collision.** The same report said "unlimited players"; raising
+  `NET.maxGuests` would have hidden the symptom for a week without fixing anything — the limit was never
+  reached. Ask which one the evidence supports before changing a number.
+- **Enforced by:** `tests/multiplayer-session.test.mjs` — "two guests with the same link are two pilots, and
+  neither is kicked", "the same pilot in two windows is still a takeover", "a guest's identity is its own
+  browser's, not the link's secret".
+
+### L46. A state read at a glance wants a colour, not a second word
+- **Seen (owner, playtest 22):** the chat's Pin button changed its word to *Pinned*, in the same breath as
+  an ask to make that column **narrower** — the word was doing a job the colour can do.
+- **Cause:** a label that changes is *unambiguous*, which suits a big button and not a 46-pixel strip: the
+  longest label sets the width for ever, and the word still does not say which way the *press* goes.
+- **Rule:** in a narrow, glanceable control the state is the fill and the label is the verb: one word that
+  never changes (*Pin*), amber-filled when on, amber-outlined when off, with `aria-pressed` and a `title`
+  for anybody who cannot see colour.
+- **Enforced by:** `tests/multiplayer-ui.test.mjs` — the pin's word is asserted constant, both fills are
+  asserted in `src/styles.css`, and the players strip's width is capped.
+
+### L44. A secret one side strips has to be put back by the other
+- **Seen (slice 5, found by the reconnect test):** rejoining in a **fresh session** — what a closed tab
+  or a lost connection leaves — was refused as *"that link has already been used"*. The copy a guest
+  keeps is the copy the **host** sent back, and a host never keeps a token (`guestRecord` deletes it),
+  so the guest had nothing left to prove itself with. Every live-session test passed, because a
+  session still holds the copy it packed.
+- **Rule:** when one side deliberately does not store a value (a secret, a hash, a session token),
+  every later send takes it from the field that survives (`away.token`), never from the copy it was
+  removed from. And a rejoin is not a variant of a live session: test it with a **new** session,
+  because that is the only shape a restart has.
+- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "rejoining after a loss keeps the version the
+  server already has", which starts a second guest session against the same host.
+
+### L43. A rule with no caller is not a feature
+- **Seen (slice 5, found by writing the test that should have passed):** the host was to write a
+  visiting pilot's suitcase back every couple of seconds. `writeBack` and its trigger existed and the
+  docs described both — but the loop was never written, so a guest came home with the copy it
+  arrived with.
+- **Cause:** each piece was tested on its own and passed; nothing tested the **seam** — that something
+  calls the piece on a clock, in a live session. A function nothing calls passes every test it has,
+  because the tests call it themselves.
+- **Rule:** when a slice promises a loop ("kept current", "every N seconds"), the test runs two
+  sessions and asserts the other side's copy changed **without the test calling the function**, and
+  the docs name the caller. Before claiming a loop is built, grep its callers: if only tests call it,
+  it is not built.
+- **Enforced by:** `tests/multiplayer-slice5.test.mjs` — "the host writes what a visiting pilot
+  became, not only what it arrived with", which drives `syncGuests` from the session's own clock.
+
+### L42. A screen that replaces the menu must earn it, every time, by evidence
+- **Seen (owner, playtest 18):** leaving a host's world put the laptop on *"Your pilot is in hostpc's
+  world"*, and that card's own **Main menu** button re-raised it on the next draw.
+- **Cause:** the condition was *the away marker exists*, true for the whole visit, so the card was the
+  title screen for as long as the visit lasted; nothing compared the copies. A flag describing *what
+  happened* (the pilot left) was used as if it described *a problem* (a newer copy is waiting).
+- **Rule:** a screen that takes the menu's place is raised by a **press** and justified by **evidence at
+  that press**, not by a state that persists. When a flag means "an event happened", ask what the
+  player can *do* right now; if the answer is "only sometimes", it needs a companion test and a door
+  that leaves the flag alone.
+- **Playtest 20 corrected the second half of this, twice over** (owner: *"logging into the guests
+  own open world does not give a prompt to bring their pilot home"*, then *"Doesnt matter if
+  nothing has changed, game should always try to use the latest pilot version since even small
+  things like pilot position can change."*). The evidence a press needs is not that two copies
+  differ — that is a question the player cannot see — but that the player is about to do something
+  the state forbids: **while the pilot is away, Open World always asks, and its answer always
+  takes the copy that world holds.** A comparison that decides whether to *offer* the one act that
+  brings the pilot back is a comparison deciding nothing: the comparison is gone (`isNewerCopy`,
+  `newerCopyAway` deleted), and `shipPlaces`/hull damage move with no number changing.
+- **Playtest 21 finished the shape: a rule that closes a door must leave a room to stand in.** A3's
+  guard soon stopped *every* way into the open world, so a player who had just sent their pilot sat
+  on the join screen with nothing to press — the right rule, enforced one screen too far. When the
+  honest answer is "this is not built yet", build a **named stand-in** and say what it is in one
+  sentence (a notice when the world opens), rather than locking the door and explaining the lock.
+- **Enforced by:** `tests/multiplayer-playtest16.test.mjs` — the card is drawn only when
+  `ui.awayCard` was raised by the press; Open World asks unconditionally while away and compares
+  nothing; "coming home takes the copy that world holds — a tie is not a reason to skip it"; and
+  "the visit opens the stand-in world and says it is not your friend's".
 
 ### L41. A control that is disabled whenever it would be useful is not a control
 - **Seen (owner, playtest 17):** *"Multiplayer on/off button doesnt work so i cant test the build properly."* The owner could not test
@@ -84,3 +172,15 @@ Read them when a task touches multiplayer suitcase custody (`checkIn`/`bringPilo
 - **Enforced by:** "cargo bought at a station only the host's world has comes home safely" and "a stack
   that waited at the host's Meridian comes home to its OWN station" in
   `tests/multiplayer-carry.test.mjs`; reverting the fix fails both.
+
+### L36. A guard that returns `false` reads as "nothing happened" to every caller
+- **Seen:** owner, playtest 14 — "clicking the bring pilot home doesnt do anything... Im stuck in the menu."
+- **Cause:** `comeHome()` opened with `if (!leaveVisit()) return false;`. From the title there is no session to leave, so it returned before unpacking anything, and the caller showed nothing. The same shape hid the second half: unpacking used the ACTIVE save, which on the title is not the open world's, so even a caller that got that far had no profile to unpack into.
+- **Rule:** a function that can do nothing says why — never a bare `false` into a UI that reads it as "no change". And a screen working on a record that is STORED rather than loaded says which save it means (`bringPilotHomeAtMenu({ mode })`) instead of assuming the active one describes it.
+- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (coming home from the title unpacks the stored mode save) and the `multiplayer-ui` assertion that `leaveVisit()` is no longer a precondition.
+
+### L35. A connection that ends is an event the host must act on
+- **Seen:** owner, playtest 14 — "When my laptop leaves it still says that laptop is logged in in the players list and there is no notification in chat that it left." Its ship stayed too, and the pilot could not get back in.
+- **Cause:** three omissions on one path. The host removed the row but never wrote the record, so `world.guests[id]` kept the OLD token hash and the next hello was a "returning guest" refused for a token it no longer had. No chat line and no `mp-guest-left` were emitted. And `upsertGuest` let a `welcome`/`presence` list (no peer id) overwrite a known peer id with nothing, after which that guest could never be matched to the peer that left.
+- **Rule:** a departed peer is handled in ONE place (`forgetPeer`), and it touches every copy of the fact: the live row, the chat, `mp-guest-left`, presence, and the stored record. A record whose pilot has gone is a suitcase, not an identity — mark it (`left`); a fresh link re-admits it. Never overwrite a known correlation id with a missing one.
+- **Enforced by:** `tests/multiplayer-playtest14.test.mjs` (leaving is removed/announced/ship gone; a returning pilot gets in with a new token).

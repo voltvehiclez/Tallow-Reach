@@ -71,7 +71,7 @@ export const KINDS = ["hello", "welcome", "refuse", "chat", "presence", "ping", 
 
 /** Allowlisted guest `act` operation names validated on both wire send and receive. */
 export const ACT_OPS = [
-  "pw", "sw",
+  "pw", "sw", "lock", "rift", "cacheClose",
   "invCancel", "invClick", "invRight", "invTake", "invStack", "invMove", "invSell", "invDiscard", "invUse", "invEquip",
   "fitClick", "fitPlace", "fitFrom", "bayUnequip", "baySwap",
   "sel", "buyShip", "sellShip", "rp", "home", "buy", "wr",
@@ -96,6 +96,7 @@ export const LIMITS = {
   // Slice 8a: how many pilots one `ships` message carries. A wire cap, never a player cap.
   ships: 24,
   entities: 32,
+  rocks: 256,
   // The largest a position, a velocity or any other single axis figure may be, in metres. A
   // pocket is kilometres across at most; bigger than this is a hand-made or corrupt packet.
   reach: 1e6,
@@ -158,8 +159,25 @@ export function cleanMessage(kind, fields = {}) {
     // 8c+: host -> guest: bullets/missiles/crates/fx in the same pocket. Visual only; host authoritative.
     // One message per pocket that holds a visitor: the world's transient objects, as the
     // host's sim holds them. Visual only; the host decides hits, loot and lifetimes.
+    // `rocks` is attached only when a pocket's asteroid field changes (mining/depletion/respawn)
+    // or a visitor enters, so routine 24 Hz packets stay small.
     case "entities":
-      return { t: "entities", place: text(fields.place, LIMITS.id), bullets: cleanBullets(fields.bullets), missiles: cleanMissiles(fields.missiles), crates: cleanCrates(fields.crates), fx: cleanFx(fields.fx), booms: u16(fields.booms), enemies: cleanEnemies(fields.enemies), picks: u16(fields.picks), efires: cleanEFires(fields.efires) };
+      return {
+        t: "entities",
+        place: text(fields.place, LIMITS.id),
+        bullets: cleanBullets(fields.bullets),
+        missiles: cleanMissiles(fields.missiles),
+        crates: cleanCrates(fields.crates),
+        fx: cleanFx(fields.fx),
+        booms: u16(fields.booms),
+        enemies: cleanEnemies(fields.enemies),
+        picks: u16(fields.picks),
+        efires: cleanEFires(fields.efires),
+        rifts: cleanRifts(fields.rifts),
+        gates: cleanGates(fields.gates),
+        caches: cleanCaches(fields.caches),
+        ...(Array.isArray(fields.rocks) ? { rocks: cleanRocks(fields.rocks) } : {}),
+      };
     // Slice 8b: one pilot's asking, rebuilt field by field. Every axis is clamped to -1..1 and
     // every held control to a real `true`, so a hand-made message cannot ask a ship for 900 m/s of
     // thrust and a `"yes"` cannot be read as a held trigger. `CONTROL_FIELDS` in
@@ -328,6 +346,11 @@ function cleanShips(raw) {
       beamStart: cleanVec3(entry.beamStart),
       beamEnd: cleanVec3(entry.beamEnd),
       mineFrac: Math.round(Math.max(0, Math.min(1, num(entry.mineFrac, 0))) * 1000) / 1000,
+      beamT: Math.round(Math.max(0, Math.min(60, num(entry.beamT, 0))) * 1000) / 1000,
+      pwr: Math.round(Math.max(0, Math.min(1, num(entry.pwr, 1))) * 1000) / 1000,
+      pwrDraw: Math.round(Math.max(0, Math.min(500, num(entry.pwrDraw, 0))) * 100) / 100,
+      enFrac: Math.round(Math.max(0, Math.min(1, num(entry.enFrac, 1))) * 1000) / 1000,
+      hint: text(entry.hint, 120),
       cone: Math.round(Math.max(0, Math.min(45, num(entry.cone, 0))) * 100) / 100,
       lockT: Math.round(Math.max(0, Math.min(60, num(entry.lockT, 0))) * 1000) / 1000,
       lockLocked: entry.lockLocked === true,
@@ -349,6 +372,11 @@ function cleanShips(raw) {
       delete last.beamEnd;
     }
     if (!last.mineFrac) delete last.mineFrac;
+    if (!last.beamT) delete last.beamT;
+    if (last.pwr === 1) delete last.pwr;
+    if (!last.pwrDraw) delete last.pwrDraw;
+    if (last.enFrac === 1) delete last.enFrac;
+    if (!last.hint) delete last.hint;
     if (!last.cone) delete last.cone;
     if (!last.lockT) delete last.lockT;
     if (!last.lockLocked) delete last.lockLocked;
@@ -475,6 +503,37 @@ function cleanEnemies(raw) {
   return out;
 }
 
+function cleanRocks(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  const round2 = (value, fallback = 0) => Math.round(num(value, fallback) * 100) / 100;
+  const vec2 = v => Array.isArray(v)
+    ? [round2(v[0]), round2(v[1]), round2(v[2])]
+    : (v && typeof v === "object" ? [round2(v.x), round2(v.y), round2(v.z)] : [0, 0, 0]);
+  for (const r of raw) {
+    if (out.length >= LIMITS.rocks) break;
+    if (!r || typeof r !== "object" || Array.isArray(r)) continue;
+    const id = Math.floor(Number(r.id));
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const ore = Math.max(0, round2(r.ore, 0));
+    const max = Math.max(0.01, round2(r.max, 1));
+    const radius = Math.max(1, round2(r.r, 10));
+    out.push({
+      id,
+      type: text(r.type, 24) || "ferrite",
+      shape: Math.max(0, Math.min(16, Math.floor(Number(r.shape) || 0))),
+      r: radius,
+      ore,
+      max,
+      pos: vec2(r.pos),
+      quat: cleanQuat(r.quat),
+      s0: vec2(r.s0),
+      scale: vec2(r.scale),
+    });
+  }
+  return out;
+}
+
 function cleanAct(fields = {}) {
   const op = text(fields.op, 32);
   if (!ACT_OPS.includes(op)) return null;
@@ -537,19 +596,220 @@ function cleanHeld(raw) {
   return out;
 }
 
+function cleanRifts(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object" || Array.isArray(e)) continue;
+    const id = Math.floor(Number(e.id));
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const row = {
+      id,
+      pos: cleanVec3(e.pos),
+      quat: cleanQuat(e.quat),
+      n: text(e.n, 64) || "Rift",
+      dest: text(e.dest, 64),
+      r: Math.max(1, num(e.r, 26)),
+      spin: Math.max(-10, Math.min(10, num(e.spin, 0.35))),
+    };
+    const variant = text(e.variant, 24);
+    const instance = text(e.instance, LIMITS.id);
+    const wormhole = text(e.wormhole, LIMITS.id);
+    const template = text(e.template, 48);
+    const peer = text(e.peer, LIMITS.id);
+    if (variant) row.variant = variant;
+    if (instance) row.instance = instance;
+    if (wormhole) row.wormhole = wormhole;
+    if (template) row.template = template;
+    if (peer) row.peer = peer;
+    if (e.locked === true) row.locked = true;
+    if (e.reentrant === true) row.reentrant = true;
+    out.push(row);
+  }
+  return out;
+}
+
+function cleanGates(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object" || Array.isArray(e)) continue;
+    const id = Math.floor(Number(e.id));
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const row = {
+      id,
+      pos: cleanVec3(e.pos),
+      quat: cleanQuat(e.quat),
+      n: text(e.n, 64) || "Way out",
+      r: Math.max(1, num(e.r, 26)),
+      spin: Math.max(-10, Math.min(10, num(e.spin, 0.35))),
+      locked: e.locked === true,
+      exit: e.exit !== false,
+    };
+    const variant = text(e.variant, 24);
+    if (variant) row.variant = variant;
+    out.push(row);
+  }
+  return out;
+}
+
+function cleanCaches(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (out.length >= LIMITS.entities) break;
+    if (!e || typeof e !== "object" || Array.isArray(e)) continue;
+    const id = Math.floor(Number(e.id));
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const row = {
+      id,
+      pos: cleanVec3(e.pos),
+      quat: cleanQuat(e.quat),
+      n: text(e.n, 64) || "Cache",
+      r: Math.max(1, num(e.r, 10)),
+      spin: Math.max(-10, Math.min(10, num(e.spin, 0.35))),
+      locked: e.locked !== false,
+    };
+    const loot = text(e.loot, 48);
+    if (loot) row.loot = loot;
+    out.push(row);
+  }
+  return out;
+}
+
+function cleanVisitGalaxy(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const seed = Number.isFinite(Number(raw.seed)) ? (Number(raw.seed) >>> 0) : null;
+  if (seed === null) return undefined;
+  const out = { seed };
+  if (raw.knowledge && typeof raw.knowledge === "object" && !Array.isArray(raw.knowledge)) {
+    out.knowledge = raw.knowledge;
+  }
+  return out;
+}
+
+function cleanVisitShops(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const key = text(k, 80);
+    const qty = Math.max(0, Math.floor(Number(v) || 0));
+    if (key) out[key] = qty;
+    if (Object.keys(out).length >= 128) break;
+  }
+  return out;
+}
+
+function cleanVisitWormholes(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [];
+  for (const w of raw) {
+    if (out.length >= 32) break;
+    if (!w || typeof w !== "object" || Array.isArray(w)) continue;
+    const id = text(w.id, LIMITS.id);
+    const parent = text(w.parent, LIMITS.id);
+    const template = text(w.template, 48);
+    if (!id || !parent || !template) continue;
+    out.push({
+      id,
+      parent,
+      template,
+      seed: (Number(w.seed) >>> 0) || 0,
+      tier: Math.max(1, Math.floor(Number(w.tier) || 1)),
+      lifetime: Math.round(Math.max(0, Number(w.lifetime) || 0) * 10) / 10,
+      totalLifetime: Math.round(Math.max(0, Number(w.totalLifetime) || 0) * 10) / 10,
+      doomed: w.doomed === true,
+    });
+  }
+  return out;
+}
+
+function cleanVisitConnections(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [];
+  for (const c of raw) {
+    if (out.length >= 32) break;
+    if (!c || typeof c !== "object" || Array.isArray(c)) continue;
+    out.push({
+      epoch: Math.max(0, Math.floor(Number(c.epoch) || 0)),
+      lifetime: Math.round(Math.max(0, Number(c.lifetime) || 0) * 10) / 10,
+    });
+  }
+  return out;
+}
+
+function cleanVisitInstance(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const id = text(raw.id, LIMITS.id);
+  const template = text(raw.template, 48);
+  if (!id || !template) return undefined;
+  let cache = null;
+  if (raw.cache && typeof raw.cache === "object" && !Array.isArray(raw.cache)) {
+    const stock = {};
+    if (raw.cache.stock && typeof raw.cache.stock === "object" && !Array.isArray(raw.cache.stock)) {
+      for (const [k, v] of Object.entries(raw.cache.stock)) {
+        const key = text(k, 40);
+        const qty = Math.max(0, Math.floor(Number(v) || 0));
+        if (key && qty > 0) stock[key] = qty;
+        if (Object.keys(stock).length >= 64) break;
+      }
+    }
+    const slots = Array.isArray(raw.cache.slots)
+      ? raw.cache.slots.slice(0, 64).map(s => (
+          Array.isArray(s) && text(s[0], 40) ? [text(s[0], 40), Math.max(1, Math.floor(Number(s[1]) || 1))] : null
+        ))
+      : null;
+    cache = {
+      n: text(raw.cache.n, 64) || "Cache",
+      loot: text(raw.cache.loot, 48),
+      open: raw.cache.open === true,
+      tradeOpen: raw.cache.tradeOpen === true,
+      stock,
+      ...(slots ? { slots } : {}),
+    };
+  }
+  return {
+    id,
+    template,
+    seed: (Number(raw.seed) >>> 0) || 0,
+    tier: Math.max(1, Math.floor(Number(raw.tier) || 1)),
+    origin: text(raw.origin, LIMITS.id),
+    lifetime: Math.round(Math.max(0, Number(raw.lifetime) || 0) * 10) / 10,
+    totalLifetime: Math.round(Math.max(0, Number(raw.totalLifetime) || 0) * 10) / 10,
+    warned: raw.warned === true,
+    expired: raw.expired === true,
+    mined: Math.max(0, Math.floor(Number(raw.mined) || 0)),
+    spawned: raw.spawned === true,
+    objectiveMet: raw.objectiveMet === true,
+    cache,
+  };
+}
+
 function cleanVisit(fields = {}) {
   const profile = fields.profile;
   const world = fields.world;
   if (!profile || typeof profile !== "object" || Array.isArray(profile)) return null;
   if (!world || typeof world !== "object" || Array.isArray(world)) return null;
+  const galaxy = cleanVisitGalaxy(fields.galaxy);
+  const shops = cleanVisitShops(fields.shops);
+  const wormholes = cleanVisitWormholes(fields.wormholes);
+  const connections = cleanVisitConnections(fields.connections);
+  const instance = cleanVisitInstance(fields.instance);
   let size = 0;
   try {
-    size = JSON.stringify(profile).length + JSON.stringify(world).length;
+    size = JSON.stringify(profile).length + JSON.stringify(world).length +
+      (galaxy ? JSON.stringify(galaxy).length : 0) +
+      (shops ? JSON.stringify(shops).length : 0) +
+      (wormholes ? JSON.stringify(wormholes).length : 0) +
+      (connections ? JSON.stringify(connections).length : 0) +
+      (instance ? JSON.stringify(instance).length : 0);
   } catch (e) {
     return null;
   }
   if (!Number.isFinite(size) || size > LIMITS.suitcase) return null;
-  return {
+  const out = {
     t: "visit",
     ackReqId: Math.max(0, Math.floor(Number(fields.ackReqId) || 0)),
     notice: text(fields.notice, LIMITS.message),
@@ -567,6 +827,12 @@ function cleanVisit(fields = {}) {
     profile,
     world,
   };
+  if (galaxy) out.galaxy = galaxy;
+  if (shops) out.shops = shops;
+  if (wormholes) out.wormholes = wormholes;
+  if (connections) out.connections = connections;
+  if (instance) out.instance = instance;
+  return out;
 }
 
 /** Enemy fires since the last packet: raw ids, capped at 8. The guest gates by its own ears. */

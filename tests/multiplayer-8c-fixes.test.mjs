@@ -495,3 +495,38 @@ test("Bug 4: guest pocket SFX parity (explosion count > 10, first-packet efires,
   assert.equal(boomSeen.get(DEFAULT_PLACE), 5);
   assert.equal(pickSeen.get(DEFAULT_PLACE), 6);
 });
+
+test("entitystream: arrival pacing (paceMs) smooths uneven 24 Hz pocket snapshots for 240 Hz sampling", async () => {
+  const { createEntityStream } = await import("../src/render/entitystream.js");
+  const paceMs = 1000 / 24;
+  const jittered = [1000, 1062, 1084, 1151, 1168, 1210];
+  const raw = createEntityStream({ delayMs: 100, samples: 8 });
+  const paced = createEntityStream({ delayMs: 100, samples: 8, paceMs });
+  for (let i = 0; i < jittered.length; i++) {
+    const pkt = {
+      place: DEFAULT_PLACE,
+      bullets: [{ id: 1, pos: [i * 12, 0, 0], quat: [0, 0, 0, 1] }],
+      missiles: [], crates: [], fx: [], enemies: [],
+    };
+    raw.receive(pkt, jittered[i]);
+    paced.receive(pkt, jittered[i]);
+  }
+  const rawSteps = [], pacedSteps = [];
+  let prevR = null, prevP = null;
+  for (let ms = 1125; ms <= 1275; ms += 4.167) {
+    const r = raw.samplePlace(DEFAULT_PLACE, ms)?.bullets?.[0]?.pos?.[0];
+    const p = paced.samplePlace(DEFAULT_PLACE, ms)?.bullets?.[0]?.pos?.[0];
+    if (prevR !== null && r !== undefined) rawSteps.push(r - prevR);
+    if (prevP !== null && p !== undefined) pacedSteps.push(p - prevP);
+    prevR = r; prevP = p;
+  }
+  const spread = arr => Math.max(...arr) - Math.min(...arr);
+  assert.ok(spread(pacedSteps) < spread(rawSteps) * 0.5, `entityStream paced spread (${spread(pacedSteps).toFixed(3)}) stays tight vs raw (${spread(rawSteps).toFixed(3)})`);
+
+  // High-speed cannon bolts (900 m/s + 300 m/s ship = 1200 m/s -> ~50-65 m per 24 Hz packet) interpolate cleanly with snapM: 300.
+  const bolts = createEntityStream({ delayMs: 100, samples: 8, snapM: 300, paceMs });
+  bolts.receive({ place: DEFAULT_PLACE, bullets: [{ id: 9, pos: [0, 0, 0], quat: [0, 0, 0, 1] }], missiles: [], crates: [], fx: [], enemies: [] }, 1000);
+  bolts.receive({ place: DEFAULT_PLACE, bullets: [{ id: 9, pos: [0, 0, -60], quat: [0, 0, 0, 1] }], missiles: [], crates: [], fx: [], enemies: [] }, 1042);
+  const boltMid = bolts.samplePlace(DEFAULT_PLACE, 1121)?.bullets?.[0];
+  assert.ok(boltMid && boltMid.pos[2] < -20 && boltMid.pos[2] > -40, `fast cannon bolt interpolates smoothly (z=${boltMid?.pos?.[2]}) instead of snapping at 24 Hz`);
+});
