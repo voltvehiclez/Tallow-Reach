@@ -1118,8 +1118,9 @@ test("2026-11-27e (relays, transport, HUD & menu guards): curated relays, warnOn
   assert.match(menuSrc, /if\s*\(\s*state\.away\s*\)\s*\{[^}]*netRequestDock\(\)/);
   const mainSrc = read("src/main.js");
   assert.match(mainSrc, /guestSelfStream\s*=\s*createShipStream\(\s*\{[^}]*delayMs:\s*SHIP_STREAM\.delayMs[^}]*paceMs:\s*STREAM_PACE_MS/);
-  assert.match(mainSrc, /entityStream\s*=\s*createEntityStream\(\s*\{[^}]*delayMs:\s*SHIP_STREAM\.delayMs[^}]*paceMs:\s*STREAM_PACE_MS/);
+  assert.match(mainSrc, /entityStream\s*=\s*createEntityStream\(\s*\{[^}]*delayMs:\s*SHIP_STREAM\.delayMs[^}]*snapM:\s*300[^}]*paceMs:\s*STREAM_PACE_MS/);
   assert.match(mainSrc, /gP\.bs\s*=/, "guest smooths boost ramp P.bs per display frame");
+  assert.match(mainSrc, /Math\.sin\(.*?\).*?tr-host-keepalive|tr-host-keepalive[\s\S]*?Math\.sin/, "host AudioWorklet emits sub-audible carrier so paused/muted background tabs stay unthrottled");
 });
 
 test("2026-11-27e end-to-end: real src/main.js two-VM guest Launch/power/mining-beam-HUD/rock-depletion and host background keepalive", async () => {

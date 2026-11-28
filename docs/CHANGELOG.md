@@ -18,6 +18,17 @@ the next person must know (save version, rebuild needed, known issues).
   `tests/docs.test.mjs` fails if there are more than 10, or if the index and the archive disagree.
 - Never delete an entry. History is only ever moved.
 
+## 2026-11-27: Fix paused-tab 1 Hz host throttling & 24 Hz cannon bolt snapping (build `2026-11-27g`)
+
+**Code change; rebuild needed; build `2026-11-27g`.** Save version unchanged (**29**); wire schema and `SHIP_STREAM` (`24 Hz` / `100 ms`) unchanged.
+
+Fixed two follow-up issues from the `2026-11-27f` multiplayer playtest:
+
+1. **Paused background host 1 Hz stall (`src/main.js`).** Opening the Pause menu calls `setAudioSuspended(true)` on the main game `AudioContext`, while `hostAudioCtx` previously wrote all-zero silence through `gain = 0`. Without active non-zero audio, Chromium dropped the tab's audible exemption and throttled background timers to `1 Hz` whenever the host switched tabs with Pause open. `startHostAudioKeepalive()` now generates a sub-audible `12 Hz` (`0.002` / `-57 dBFS`) sine carrier in both `AudioWorkletNode` and `ScriptProcessorNode` (ramped `0 -> 1` over `50 ms`, resumed automatically on `visibilitychange`/gesture), keeping background host tabs unthrottled while paused or muted on both `https://` and `file://`.
+2. **Cannon shot 24 Hz stepping & stream lockstep (`src/main.js`, `src/net/session.js`).** Cannon bolts (`900 m/s` + up to `300 m/s` ship speed) move `44–65 m` per `42 ms` snapshot, tripping `entityStream`'s `snapM: 50` teleport cutoff every frame and preventing interpolation. Raised `entityStream` `snapM` to `300` (and `guestSelfStream` `snapM` to `80`), and piggybacked `startEntityStream()` onto `shipTick` (`entityTick = -1`) so ship poses and spawned projectiles emit from the same `24 Hz` host tick.
+
+**Tests:** Added fast cannon-bolt interpolation test in `tests/multiplayer-8c-fixes.test.mjs` and sub-audible keepalive / `snapM: 300` assertions in `tests/multiplayer-playtest-20261127.test.mjs`; `npm test` **1170/1170**, build **3671 KB**. **Docs:** Archived `2026-11-25` Playtest 24 entry, added `L57` in `docs/LESSONS.md`, and updated `docs/HANDOFF.md` and `docs/architecture/multiplayer.md`.
+
 ## 2026-11-27: Pre-8d 240 Hz guest jitter & turn smoothing (build `2026-11-27f`)
 
 **Code change; rebuild needed; build `2026-11-27f`.** Save version unchanged (**29**); wire schema and `SHIP_STREAM` (`24 Hz` / `100 ms`) unchanged.
@@ -177,54 +188,9 @@ written down in one place.
   the lead pip — a pilot's reference carries a velocity on the host's screen and on a guest's, and
   the instrument's gates (any lock, moving only, primary bay only). `npm test` **1131/1131**.
 
-## 2026-11-25: Playtest 24 — a repaired pilot comes back repaired, the visitor's hull stops blurring, and the chat can be copied
-
-**Code change; rebuild needed; build `2026-11-25f`.** Save version unchanged (**29**); one new field on
-one existing wire message, and no saved field at all.
-
-The owner's first flight of 8b reported three things. All of them are here, each with a test that fails
-on the old code.
-
-- **1. "Repair the pilot at home, bring it back, and it is still damaged"** — and the host said *"this
-  world kept its own"*. The repair really was in the suitcase; the world simply refused it. The ordering
-  pair (`epoch`, `rev`) cannot express "this copy came from home": a host raises `rev` on **every**
-  write-back, while a fresh `checkOut` starts every trip at `epoch 0, rev 0` — so the copy carrying the
-  repair is the one that looks older, and the damaged copy won. Slice 5's rule had been reading the
-  guest's own `left` mark instead, which conflated two different situations: *the pilot went home*
-  (believe the guest) and *the connection dropped* (believe this world — that rule is still pinned by
-  its own test). So a `carry` now says which it is: **`fresh: true`** means *packed out of the pilot's
-  own home save just now*, and only the guest can know it. `net/protocol.js` carries the flag;
-  `net/session.js` sets it in `sendCarry` (a new `checkOut`) and never on a rejoin of a stored suitcase,
-  and `onCarry` believes a fresh copy whatever the pair says. `left` is only about admission now.
-- **2. "The guest's hull and name tag go blurry on the host's screen, worse the faster it flies, only
-  while the host turns"** — the 2026-11-08 high-refresh sawtooth, back on the one record that fix never
-  reached. `snap` means "draw this frame un-interpolated", and only `chaseView` ever cleared it — for the
-  **local** hull. A visiting record keeps its `snap` from `launch()` for ever, so its hull was placed at
-  the last 60 Hz tick under a 240 Hz camera. `render/views.js` `poseOfRecord` now consumes the flag
-  after taking the pose, so the jump frame is still a jump and every frame after it interpolates like
-  the rest of the sky.
-- **3. "Opening chat with Enter should let me select and copy the text; selecting closes the box"** —
-  the field's `blur` handler closed an empty box, and a press on the lines blurs the field. Now a press
-  on the conversation starts a selection and keeps the box (and holds the redraws back, so a line that
-  arrives mid-drag cannot wipe the selection); a press on the field or **Pin** is typing; a press
-  anywhere else ends the selection and closes an empty, unpinned box exactly as before. Text is
-  selectable **only in the box opened with Enter** — `styles.css` gives the lines `user-select: none`
-  and turns it on under `body.mp-chat-open`, which is the owner's own line: not a glance, not a pinned
-  readout. Escape still closes it while a selection is up (the field no longer has the cursor, so the
-  box's own key handler would not see it).
-
-**Tests:** `tests/playtest24-fixes.test.mjs` (new, **5**): the repair surviving the round trip end to end
-(two real sessions, the host's own write-back, `bringPilotHome`, a repair, a rejoin — and the host's chat
-saying the pilot *arrived* rather than *kept its own*), the fresh flag reaching the wire with its pair at
-zero, a visitor's hull interpolating between ticks, a docked visitor untouched, and the chat press rule
-plus the stylesheet rule. `tests/multiplayer-slice5.test.mjs`'s "came home and came back" case now sends
-`fresh: true` — the same claim, said out loud. `npm test` **1122/1122**, build **3599 KB**.
-
-**What the owner must do:** hard-reload on **both** machines, check **Connection details** reads
-**`2026-11-25f`**, then follow `testing/TESTING-16-SLICE8B-FIXES.md`.
-
 ## Older entries (index; full text in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md))
 
+- 2026-11-25: Playtest 24 — a repaired pilot comes back repaired, the visitor's hull stops blurring, and the chat can be copied
 - 2026-11-25: Step 16 slice 8b — the guest's controls reach its ship
 - 2026-11-25: Step 16 slice 8a PLAYTEST-CONFIRMED
 - 2026-11-25: Playtest 23 follow-up — the Ship filter shows every ship, the guest included

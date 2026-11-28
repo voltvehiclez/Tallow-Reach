@@ -132,8 +132,10 @@ const shipStream = createShipStream({ paceMs: STREAM_PACE_MS });
 // Own ship and pocket entities buffer past at least two 24 Hz snapshots (`SHIP_STREAM.delayMs` = 100 ms)
 // with arrival dejittering (`paceMs`) so high-refresh screens (165/240 Hz) interpolate continuously
 // without running dry into hold-frames between packets.
-const guestSelfStream = createShipStream({ delayMs: SHIP_STREAM.delayMs, samples: 8, staleMs: 1500, snapM: 50, paceMs: STREAM_PACE_MS });
-const entityStream = createEntityStream({ delayMs: SHIP_STREAM.delayMs, samples: 8, staleMs: 1500, snapM: 50, paceMs: STREAM_PACE_MS });
+const guestSelfStream = createShipStream({ delayMs: SHIP_STREAM.delayMs, samples: 8, staleMs: 1500, snapM: 80, paceMs: STREAM_PACE_MS });
+// Projectiles (`cannon_basic` 900 m/s + ship speed = ~1200 m/s) travel ~50–150 m across 1–3 packets;
+// snapM: 300 keeps cannon shots interpolating smoothly at 240 Hz while still snapping real teleports.
+const entityStream = createEntityStream({ delayMs: SHIP_STREAM.delayMs, samples: 8, staleMs: 1500, snapM: 300, paceMs: STREAM_PACE_MS });
 const boomSeen = new Map();
 const pickSeen = new Map();
 
@@ -860,7 +862,7 @@ refreshGuns();   // and the primary bays decide what fires on left click
 let hasUserGesture = false;
 const noteUserGesture = () => {
   hasUserGesture = true;
-  if (isNetOn()) startHostAudioKeepalive();
+  if (isNetOn() && hostKeepaliveOn) startHostAudioKeepalive();
 };
 addEventListener("pointerdown", () => initAudio(), { passive: true });
 addEventListener("keydown", () => initAudio());
@@ -1093,10 +1095,12 @@ const simClock = createSimClock(undefined, {
 // hidden or minimised — otherwise the guest sees a freeze. `requestAnimationFrame`
 // stalls in a hidden tab, and main-thread `setInterval` throttles to 1 Hz (1 fps).
 // On `file://`, `new Worker(blobUrl)` can also throw `SecurityError`, falling back
-// to that throttled `setInterval`. So alongside `Worker` (blob: then data:), we run
-// an unthrottled WebAudio hardware-thread heartbeat (`AudioWorkletNode`, falling back
-// to `ScriptProcessorNode` through a zero-gain node) once a user gesture has unlocked
-// AudioContext, keeping `simClock` + `host-keepalive-tick` at ~47–62 Hz even on `file://`.
+// to that throttled `setInterval`. Furthermore, when the host opens the Pause menu
+// (`setAudioSuspended(true)`), suspending the main game AudioContext drops Chromium's
+// audible-tab throttling exemption if our keepalive node outputs 0.0 silence. So
+// alongside `Worker` (blob: then data:), we run an unthrottled WebAudio hardware
+// heartbeat emitting an inaudible 12 Hz (-57 dBFS) sub-sonic carrier so Chromium
+// keeps the host tab unthrottled even while paused or muted on `file://`.
 let hostTick = null;
 let hostWorker = null;
 let hostTickAt = 0;
@@ -1174,7 +1178,11 @@ function startHostWorker() {
   return tryStart(`data:text/javascript;charset=utf-8,${encodeURIComponent(workerSrc)}`, false);
 }
 function startHostAudioKeepalive() {
-  if (!hostKeepaliveOn || !hasUserGesture || hostAudioNode || hostAudioBusy) return;
+  if (!hostKeepaliveOn || !hasUserGesture) return;
+  if (hostAudioCtx && hostAudioCtx.state === "suspended" && typeof hostAudioCtx.resume === "function") {
+    hostAudioCtx.resume().catch(() => {});
+  }
+  if (hostAudioNode || hostAudioBusy) return;
   const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (typeof Ctx !== "function") return;
   hostAudioBusy = true;
@@ -1184,13 +1192,18 @@ function startHostAudioKeepalive() {
     if (ctx.state === "suspended" && typeof ctx.resume === "function") {
       ctx.resume().catch(() => {});
     }
-    const attachZeroGain = node => {
+    const attachKeepaliveNode = node => {
       if (!hostKeepaliveOn || hostAudioNode) {
         try { node.disconnect?.(); } catch (e) {}
         return;
       }
       const gain = ctx.createGain();
-      gain.gain.value = 0;
+      if (typeof gain.gain?.setValueAtTime === "function" && typeof gain.gain?.linearRampToValueAtTime === "function" && typeof ctx.currentTime === "number") {
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.05);
+      } else if (gain.gain) {
+        gain.gain.value = 1;
+      }
       node.connect(gain);
       gain.connect(ctx.destination);
       hostAudioNode = node;
@@ -1201,13 +1214,23 @@ function startHostAudioKeepalive() {
       if (!hostKeepaliveOn || hostAudioNode || typeof ctx.createScriptProcessor !== "function") return;
       try {
         const sp = ctx.createScriptProcessor(1024, 1, 1);
-        sp.onaudioprocess = advanceHostClock;
-        attachZeroGain(sp);
+        let spPhase = 0;
+        sp.onaudioprocess = ev => {
+          const out = ev?.outputBuffer?.getChannelData?.(0);
+          if (out) {
+            for (let i = 0; i < out.length; i += 1) {
+              spPhase = (spPhase + 0.0015708) % 6.2831853;
+              out[i] = 0.002 * Math.sin(spPhase);
+            }
+          }
+          advanceHostClock();
+        };
+        attachKeepaliveNode(sp);
       } catch (e) {}
     };
     const WorkletNode = globalThis.AudioWorkletNode;
     if (ctx.audioWorklet && typeof ctx.audioWorklet.addModule === "function" && typeof WorkletNode === "function") {
-      const workletCode = "class K extends AudioWorkletProcessor{constructor(){super();this._n=0;}process(){if(++this._n>=6){this._n=0;this.port.postMessage(1);}return true;}}registerProcessor('tr-host-keepalive',K);";
+      const workletCode = "class K extends AudioWorkletProcessor{constructor(){super();this._n=0;this._p=0;}process(i,outputs){const out=outputs&&outputs[0]&&outputs[0][0];if(out){for(let k=0;k<out.length;k++){this._p=(this._p+0.0015708)%6.2831853;out[k]=0.002*Math.sin(this._p);}}if(++this._n>=6){this._n=0;this.port.postMessage(1);}return true;}}registerProcessor('tr-host-keepalive',K);";
       const modUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(workletCode)}`;
       ctx.audioWorklet.addModule(modUrl).then(() => {
         hostAudioBusy = false;
@@ -1215,7 +1238,7 @@ function startHostAudioKeepalive() {
         try {
           const node = new WorkletNode(ctx, "tr-host-keepalive", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
           node.port.onmessage = advanceHostClock;
-          attachZeroGain(node);
+          attachKeepaliveNode(node);
         } catch (e) {
           fallbackScriptProcessor();
         }

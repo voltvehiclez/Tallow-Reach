@@ -136,6 +136,21 @@ Mission lessons are first because missions are where most bugs have come from. T
   itself away, unless it is pinned": hidden before anything is said, up inside `CHAT.autoHideSec`,
   gone after it, pinned and typing keep it, a panel or the title does not.
 
+### L57. Paused background host keepalive needs non-zero sub-audible audio; fast bolts exceed `50 m` `snapM`
+- **Seen (owner, `2026-11-27` on `2026-11-27f`):** switching tabs on the host while unpaused ran smoothly,
+  but switching tabs with the Pause menu open throttled guest updates to 1 Hz (1 update/sec); cannon
+  shots also appeared to jump at ~24–30 fps while flying.
+- **Cause:** `setPause(true)` calls `setAudioSuspended(true)` on the main audio engine, leaving only
+  `hostAudioCtx` whose `gain = 0` / all-zero `AudioWorkletProcessor` fell below Chromium's `-65 dBFS`
+  audible-tab threshold and triggered background throttling; meanwhile `900+300 m/s` cannon shots
+  moved `44–65 m` per `42 ms` snapshot, tripping `entityStream`'s `snapM: 50` cutoff every frame.
+- **Rule:** keep `hostAudioCtx` outputting an inaudible sub-sonic carrier (`12 Hz` at `0.002` / `-57 dBFS`
+  through a `0 -> 1` ramped gain, resumed on `visibilitychange`) so paused/muted background host tabs
+  retain Chromium's audible exemption; size `entityStream`'s `snapM` (`300 m`) for max projectile step
+  distance and piggyback `startEntityStream` on `shipTick` so ship and bolt snapshots share one tick.
+- **Enforced by:** `tests/multiplayer-8c-fixes.test.mjs` (`1200 m/s` bolt interpolation at `snapM: 300`)
+  and `tests/multiplayer-playtest-20261127.test.mjs` (keepalive carrier + `snapM: 300` guard).
+
 ### L56. Multi-pocket simulation, guest HUD/beam vitals, rock sync, and `file://` host keepalive
 - **Seen (owner, `2026-11-27` on `2026-11-27d`):** minimizing host on `file://` froze the world; guest
   Launch occasionally snapped back to `[0,0,0]`/`docked` or froze in remote pockets with broken rock

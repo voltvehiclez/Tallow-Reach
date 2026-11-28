@@ -1439,7 +1439,10 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    */
   function startShipStream() {
     if (shipTick || role !== "host") return false;
-    shipTick = setInterval(broadcastShips, Math.max(1, Math.round(1000 / SHIP_STREAM.hz)));
+    shipTick = setInterval(() => {
+      broadcastShips();
+      if (entityTick === -1) broadcastEntities();
+    }, Math.max(1, Math.round(1000 / SHIP_STREAM.hz)));
     if (typeof shipTick?.unref === "function") shipTick.unref();
     return true;
   }
@@ -1481,6 +1484,11 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
   function startEntityStream() {
     if (entityTick || role !== "host") return false;
+    if (shipTick) {
+      // Piggyback on `shipTick` so ship poses and spawned cannon shots come from the same tick.
+      entityTick = -1;
+      return true;
+    }
     entityTick = setInterval(broadcastEntities, Math.max(1, Math.round(1000 / SHIP_STREAM.hz)));
     if (typeof entityTick?.unref === "function") entityTick.unref();
     return true;
@@ -2026,7 +2034,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
     if (hostWait) { clearTimeout(hostWait); hostWait = 0; }
     if (guestSync) { clearInterval(guestSync); guestSync = 0; }
     if (shipTick) { clearInterval(shipTick); shipTick = 0; }
-    if (entityTick) { clearInterval(entityTick); entityTick = 0; }
+    if (entityTick) { if (entityTick !== -1) clearInterval(entityTick); entityTick = 0; }
     if (controlTick) { clearInterval(controlTick); controlTick = 0; }
     visitPrint.clear();
     visitStatePrint.clear();
