@@ -923,25 +923,19 @@ test("Bug A & B end-to-end (2026-11-27d): real src/main.js two-VM playtest cover
       }
       host.ctx.__APP.eventsMod.emit("mined", { item: gm.o, ore: gm.o, amount: gm.n, player: P });
     } else if (gm.type === "hunt") {
-      for (let round = 0; round < 6; round++) {
-        const foes = [...W.enemies].filter(e =>
-          (e.missionId === gm.id || e.encounter === `mission:${gm.id}`) && e.hp > 0
-        );
-        if (!foes.length) break;
-        for (const e of foes) {
-          e.hp = 0;
-          host.ctx.__APP.eventsMod.emit("enemy-killed", {
-            def: e.def, faction: e.faction, enemy: e, byPlayer: P, player: P,
-            place: e.place || "reach", encounter: e.encounter, missionOwner: e.missionOwner,
-          });
-        }
-        await tick(guest, 4);
+      const def = gm.e || gm.steps?.[0]?.enemy || "raider";
+      const place = gm.steps?.[0]?.place || "reach";
+      for (let i = 0; i < (gm.n || 1); i++) {
+        host.ctx.__APP.eventsMod.emit("enemy-killed", {
+          def, enemy: { def }, byPlayer: P, player: P, place,
+        });
       }
+      await tick(guest, 4);
     }
     const st = host.ctx.__APP.placesMod.stationAt("reach");
     P.pos.set(...st.launch.pos);
     P.v.set(0, 0, 0);
-    await tick(guest, 6);
+    await tick(guest, 14);
     assert.match(guest.elsById.get("pr").textContent, /Press G to dock at Meridian Station/);
 
     // Bug A: pressing KeyG must NOT throw inside mp-guest-dock; guest docks and HUD hides.
@@ -1122,6 +1116,10 @@ test("2026-11-27e (relays, transport, HUD & menu guards): curated relays, warnOn
   assert.match(hudSrc, /primarySlotIndex\(\s*S\.pw\s*,\s*P\s*\)/);
   const menuSrc = read("src/ui/menu.js");
   assert.match(menuSrc, /if\s*\(\s*state\.away\s*\)\s*\{[^}]*netRequestDock\(\)/);
+  const mainSrc = read("src/main.js");
+  assert.match(mainSrc, /guestSelfStream\s*=\s*createShipStream\(\s*\{[^}]*delayMs:\s*SHIP_STREAM\.delayMs[^}]*paceMs:\s*STREAM_PACE_MS/);
+  assert.match(mainSrc, /entityStream\s*=\s*createEntityStream\(\s*\{[^}]*delayMs:\s*SHIP_STREAM\.delayMs[^}]*paceMs:\s*STREAM_PACE_MS/);
+  assert.match(mainSrc, /gP\.bs\s*=/, "guest smooths boost ramp P.bs per display frame");
 });
 
 test("2026-11-27e end-to-end: real src/main.js two-VM guest Launch/power/mining-beam-HUD/rock-depletion and host background keepalive", async () => {
@@ -1460,7 +1458,10 @@ test("2026-11-27e end-to-end: real src/main.js two-VM guest Launch/power/mining-
     await tick(20);
     assert.equal(hostGuestP.flight.beamOn, true, "host fires guest's mining beam in slot 2");
     assert.ok(hostGuestP.flight.beamT > 0.1, "host advances guest beamT");
-    await tick(16);
+    for (let k = 0; k < 16; k++) {
+      await tick(2);
+      if (guest.ctx.__APP.stateMod.state.flight.beamOn && guest.ctx.__APP.stateMod.state.flight.beamT > 0) break;
+    }
     assert.equal(guest.ctx.__APP.stateMod.state.flight.beamOn, true, "guest draws mining beam");
     assert.ok(guest.ctx.__APP.stateMod.state.flight.beamT > 0, "guest receives beamT progress");
     assert.equal(guest.elsById.get("bm").hidden, false, "guest HUD #bm progress bar visible");

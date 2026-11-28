@@ -129,3 +129,34 @@ test("weapons: the ship stream interpolates beamT/pwr/pwrDraw/enFrac and keeps h
   assert.equal(onsetPose.beamOn, true);
   assert.equal(onsetPose.beamT, 0.14);
 });
+
+test("shipstream: arrival pacing (paceMs) prevents jitter surging and Hermite curves preserve tangent along turns", () => {
+  const paceMs = 1000 / 24;
+  const jittered = [1000, 1062, 1084, 1151, 1168, 1210]; // includes +25 ms late packet (gap 67 ms) followed by 17 ms rebound
+  const rawStream = createShipStream({ delayMs: 100, samples: 8 });
+  const pacedStream = createShipStream({ delayMs: 100, samples: 8, paceMs });
+  for (let i = 0; i < jittered.length; i++) {
+    const entry = shipEntry(stub({ pos: vec(i * 10, 0, 0), v: vec(240, 0, 0) }), { id: "guest-1", name: "Acey" });
+    rawStream.receive([entry], jittered[i]);
+    pacedStream.receive([entry], jittered[i]);
+  }
+  // Sample every 4.17 ms (240 Hz) across the middle window: paced step distances stay much steadier than raw jittered.
+  const rawSteps = [], pacedSteps = [];
+  let prevR = null, prevP = null;
+  for (let ms = 1125; ms <= 1275; ms += 4.167) {
+    const r = rawStream.sample(ms)[0]?.pos.x;
+    const p = pacedStream.sample(ms)[0]?.pos.x;
+    if (prevR !== null && r !== undefined) rawSteps.push(r - prevR);
+    if (prevP !== null && p !== undefined) pacedSteps.push(p - prevP);
+    prevR = r; prevP = p;
+  }
+  const spread = arr => Math.max(...arr) - Math.min(...arr);
+  assert.ok(spread(pacedSteps) < spread(rawSteps) * 0.5, `paced spread (${spread(pacedSteps).toFixed(3)}) stays tight vs raw (${spread(rawSteps).toFixed(3)})`);
+
+  // Curved turn: moving 10 m forward while velocity rotates across +Z gives an outward arc via Hermite.
+  const curve = createShipStream({ delayMs: 100, samples: 6 });
+  curve.receive([shipEntry(stub({ pos: vec(0, 0, 0), v: vec(250, 0, -40) }), { id: "guest-1", name: "Acey" })], 1000);
+  curve.receive([shipEntry(stub({ pos: vec(10, 0, 0), v: vec(240, 0, 40) }), { id: "guest-1", name: "Acey" })], 1040);
+  const mid = curve.sample(1120)[0];
+  assert.ok(mid.pos.z < -0.1, `Hermite midpoint traces the outward arc (z=${mid.pos.z.toFixed(3)}) rather than flat chord z=0`);
+});

@@ -125,21 +125,50 @@ const cleanList = (arr, fn) => (Array.isArray(arr) ? arr.map(fn).filter(Boolean)
 /**
  * Snapshot ring buffer for one guest screen's visited pockets.
  */
-export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM } = {}) {
+export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM, paceMs = 0 } = {}) {
   const delay = Number.isFinite(delayMs) ? delayMs : 50;
   const keep = Math.max(2, Math.floor(Number.isFinite(samples) ? samples : 8));
   const stale = Number.isFinite(staleMs) ? staleMs : SHIP_STREAM.staleMs;
   const snap = Number.isFinite(snapM) ? snapM : SHIP_STREAM.snapM;
   const snapSq = snap * snap;
+  const pace = Number.isFinite(paceMs) && paceMs > 0 ? paceMs : 0;
 
   const byPlace = new Map();
+
+  function paceTimestamp(record, rawAt) {
+    if (!pace) return rawAt;
+    if (!record.prevRawAt || rawAt - record.prevRawAt > pace * 3 || rawAt < record.prevRawAt - pace) {
+      record.prevRawAt = rawAt;
+      record.pacedAt = rawAt;
+      return rawAt;
+    }
+    if (rawAt <= record.prevRawAt) return record.pacedAt;
+    const sincePaced = rawAt - record.pacedAt;
+    let next;
+    if (sincePaced < pace * 0.45) {
+      next = Math.max(record.pacedAt + 1, rawAt);
+    } else {
+      const steps = Math.max(1, Math.round(sincePaced / pace - 0.25));
+      const expected = record.pacedAt + steps * pace;
+      const err = rawAt - expected;
+      const maxLag = Math.min(28, delay * 0.28);
+      next = expected + err * 0.15;
+      next = Math.max(next, rawAt - maxLag);
+      next = Math.min(next, rawAt + 8);
+      if (next <= record.pacedAt) next = record.pacedAt + 1;
+    }
+    record.prevRawAt = rawAt;
+    record.pacedAt = next;
+    return next;
+  }
 
   function receive(packet, at = Date.now()) {
     if (!packet || typeof packet !== "object" || !Number.isFinite(at)) return 0;
     const place = typeof packet.place === "string" ? packet.place.trim() : "";
     if (!place) return 0;
+    const record = byPlace.get(place) || { frames: [], lastAt: 0, prevRawAt: 0, pacedAt: 0 };
     const frame = {
-      at,
+      at: paceTimestamp(record, at),
       place,
       bullets: cleanList(packet.bullets, cleanBullet),
       missiles: cleanList(packet.missiles, cleanMissile),
@@ -147,12 +176,11 @@ export function createEntityStream({ delayMs = 50, samples = 8, staleMs, snapM }
       fx: cleanList(packet.fx, cleanFx),
       enemies: cleanList(packet.enemies, cleanEnemy),
     };
-    const record = byPlace.get(place) || { frames: [], lastAt: 0 };
     const last = record.frames[record.frames.length - 1];
     if (last && last.at >= frame.at) record.frames[record.frames.length - 1] = frame;
     else record.frames.push(frame);
     while (record.frames.length > keep) record.frames.shift();
-    record.lastAt = Math.max(record.lastAt, frame.at);
+    record.lastAt = Math.max(record.lastAt, at);
     byPlace.set(place, record);
     return record.frames.length;
   }

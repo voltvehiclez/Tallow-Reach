@@ -61,6 +61,7 @@ import {
   requestGuestAction,
   isOn as isNetOn,
 } from "./net/session.js";
+import { SHIP_STREAM } from "./data/multiplayer.js";
 import { enterPlace as simEnterPlace } from "./sim/places.js";
 import * as THREE from "three";
 import { setupMenu, openStationTab, closePanelPopovers } from "./ui/menu.js";
@@ -122,10 +123,17 @@ import {
  *   `mp-state`           a session that ends forgets every friend at once, so a hull can never
  *                        outlive the connection that described it.
  */
-const shipStream = createShipStream();
-// Own ship needs its own interpolated buffer too — otherwise a 165 Hz guest sees its own hull at 24 Hz. Same timings but a shorter delay for responsiveness (35 ms vs 100 ms for other pilots).
-const guestSelfStream = createShipStream({ delayMs: 35, samples: 8, staleMs: 1500, snapM: 50 });
-const entityStream = createEntityStream({ delayMs: 50, samples: 8, staleMs: 1500, snapM: 50 });
+const STREAM_PACE_MS = 1000 / SHIP_STREAM.hz;
+const hrNow = (typeof performance === "object" && typeof performance?.timeOrigin === "number")
+  ? (perfMs = performance.now()) => performance.timeOrigin + perfMs
+  : () => Date.now();
+
+const shipStream = createShipStream({ paceMs: STREAM_PACE_MS });
+// Own ship and pocket entities buffer past at least two 24 Hz snapshots (`SHIP_STREAM.delayMs` = 100 ms)
+// with arrival dejittering (`paceMs`) so high-refresh screens (165/240 Hz) interpolate continuously
+// without running dry into hold-frames between packets.
+const guestSelfStream = createShipStream({ delayMs: SHIP_STREAM.delayMs, samples: 8, staleMs: 1500, snapM: 50, paceMs: STREAM_PACE_MS });
+const entityStream = createEntityStream({ delayMs: SHIP_STREAM.delayMs, samples: 8, staleMs: 1500, snapM: 50, paceMs: STREAM_PACE_MS });
 const boomSeen = new Map();
 const pickSeen = new Map();
 
@@ -532,13 +540,12 @@ function installMultiplayerShips() {
     });
     request.answered = true;
   });
-  on("mp-ships", ({ ships, at } = {}) => shipStream.receive(ships, at));
+  on("mp-ships", ({ ships, at } = {}) => shipStream.receive(ships, at || hrNow()));
   on("mp-self-ship", ({ ship, at } = {}) => {
     if (!isGuestVisiting() || !ship) return;
-    // Own ship is also a stream (see guestSelfStream) so a 165 Hz guest does not see its
-    // own hull at 24 Hz. The pose is interpolated like any other pilot, but with a shorter
-    // delay (60 ms vs 100 ms) so controls feel less laggy; the frame loop samples it each frame.
-    guestSelfStream.receive([ship], at || Date.now());
+    // Own ship uses the same buffer depth (`SHIP_STREAM.delayMs` = 100 ms) + arrival pacing so
+    // high-refresh guests (165/240 Hz) interpolate continuously instead of stalling between packets.
+    guestSelfStream.receive([ship], at || hrNow());
   });
   on("mp-visit", visit => applyVisitSnapshot(visit));
   on("mp-refresh-home", () => {
@@ -548,7 +555,7 @@ function installMultiplayerShips() {
   on("mp-refresh-visit", () => {
     if (isGuestVisiting() && lastVisitSnapshot) {
       applyVisitSnapshot(lastVisitSnapshot);
-      const latestSelf = guestSelfStream.sample(Date.now());
+      const latestSelf = guestSelfStream.sample(hrNow());
       if (latestSelf.length) applySelfShip(latestSelf[0]);
     }
   });
@@ -677,7 +684,7 @@ function installMultiplayerEntities() {
     }
     request.answered = true;
   });
-  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires, rocks } = {}) => {
+  on("mp-entities", ({ place, bullets, missiles, crates, fx, booms, enemies, picks, efires, rocks, at } = {}) => {
     if (!place || typeof place !== "string" || !isGuestVisiting()) return;
     if (place !== state.place) return;   // entities only for the pocket this screen is in
     const W = placeWorld(place);
@@ -688,7 +695,7 @@ function installMultiplayerEntities() {
     }
     try {
       if (Array.isArray(rocks)) syncPocketRocks(W, rocks, place);
-      const nowMs = Date.now();
+      const nowMs = at || hrNow();
       const firstArrival = !hasNetEntities(W);
       entityStream.receive({ place, bullets, missiles, crates, fx, enemies }, nowMs);
       if (firstArrival) {
@@ -1309,20 +1316,22 @@ function drawFrame(now) {
     Object.assign(state.aimDirection, { x: aim.x, y: aim.y, z: aim.z });
   }
   simClock.advance(dt);
-  // Guest's own ship and visited-pocket entities use buffered snapshot interpolation (35 ms / 50 ms)
-  // so high-refresh screens move smoothly instead of jittering at 24 Hz against 60 Hz prevPoses.
+  const sampleAt = hrNow(now);
+  // Guest's own ship and visited-pocket entities use buffered snapshot interpolation (`SHIP_STREAM.delayMs` = 100 ms)
+  // with arrival dejittering so high-refresh displays (e.g. 240 Hz) move smoothly instead of stalling between packets.
   if (isGuestVisiting()) {
-    const nowMs = Date.now();
-    const selfPoses = guestSelfStream.sample(nowMs);
+    const selfPoses = guestSelfStream.sample(sampleAt);
     if (selfPoses.length) applySelfShip(selfPoses[0]);
-    const snap = entityStream.samplePlace(state.place, nowMs);
+    const gP = localPlayer();
+    if (gP) gP.bs = (gP.bs || 0) + ((gP.boost ? 1 : 0) - (gP.bs || 0)) * Math.min(1, dt * 8);
+    const snap = entityStream.samplePlace(state.place, sampleAt);
     if (snap) syncPocketEntities(placeWorld(state.place), snap, state.place);
   }
   const alpha = simClock.alpha();
   updateEnemyViews(alpha);    // interpolate each hostile's mesh between 60 Hz ticks
   // Slice 8a: every other pilot. A host draws its visiting records straight from `state.players`
   // (no wire at all); a guest draws what the host sent, `SHIP_STREAM.delayMs` in the past.
-  updateEntityViews(alpha, shipStream.sample());   // and every bullet, missile, crate, particle, rock and the ship
+  updateEntityViews(alpha, shipStream.sample(sampleAt));   // and every bullet, missile, crate, particle, rock and the ship
   updateWarpStreaks(dt);      // all three hide themselves when no warp is running
   updateWarpFlash();
 

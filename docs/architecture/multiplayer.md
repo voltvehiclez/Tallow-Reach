@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-27 (slices 1–5, 7, 8a/8b playtest-confirmed; **8c + guest sync + live playtest fixes built to `2026-11-27e`**, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-27 (slices 1–5, 7, 8a/8b playtest-confirmed; **8c + guest sync + 240 Hz smoothing built to `2026-11-27f`**, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea
@@ -345,6 +345,7 @@ preserving `tokenHash` across metadata/write-back updates (`tests/playtest24-fix
   plus imports `cancelGuestHeld` in `mp-guest-dock` (logging dock/warp/visit errors via `console.error`).
 
 - **Mining beam, HUD vitals, asteroid parity & host keepalive (`2026-11-27e`):** `SHIP_FIELDS` carries `beamT`, `pwr`, `pwrDraw`, `enFrac`, and `hint` (`sayForPlayer` guest hints expired by `step.js`), matched by `primarySlotIndex(S.pw, P)` in `ui/hud.js`. Host `mp-entities-request` sends diffed/throttled `rocks` (`LIMITS.rocks = 256`) synced via `render/entitystream.js` `syncPocketRocks` (`loadPlace` skips double-spawn when `_net` rocks exist; `clearNetEntities` resets `loaded = false`); `sim/player.js` `flight()` checks `placeWorld(P.place || state.place)` for remote-pocket collisions; `applyVisitSnapshot` preserves mid-flight `power`/`en`; `applySelfShip` skips stale `docked` snapshots before `dockStreamCaughtUp` and shows Launch/Warp notices; `main.js` adds `data:` Worker + zero-gain `AudioWorkletNode` host keepalive (`file://`-safe); and `transport.js` sets `warnOnRelayFailure = false` over 10 curated `RELAYS.relayUrls`.
+- **Pre-8d 240 Hz guest jitter & turn smoothing (`2026-11-27f`):** `guestSelfStream` and `entityStream` in `main.js` use `SHIP_STREAM.delayMs` (`100 ms`) with `paceMs: 1000 / SHIP_STREAM.hz` arrival dejittering (matching `shipStream`), `hrNow` sub-ms receive/sample timestamps across `net/session.js` and `main.js`, Cubic Hermite turn-curve blending (`interpPos`) and `warpFx`/`warpFlash`/`shake` interpolation in `render/shipstream.js`, and per-frame guest `gP.bs` boost damping in `drawFrame`.
 
 **Tests:** `tests/multiplayer-guest-sync.test.mjs`, `tests/multiplayer-8c-fixes.test.mjs`,
 `tests/multiplayer-playtest-20261127.test.mjs`; guide: [../../testing/TESTING-16-SLICE8C.md](../../testing/TESTING-16-SLICE8C.md).

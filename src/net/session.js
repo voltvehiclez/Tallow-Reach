@@ -70,6 +70,11 @@ import { NET, CHAT, SHIP_STREAM, CONTROLS, TRAVEL_FIELDS } from "../data/multipl
 /** A whole, non-negative number: what every count on the wire is. */
 const whole = value => Math.max(0, Math.floor(Number(value) || 0));
 
+/** Sub-millisecond wall-epoch timestamp in browsers (matches rAF/performance.now precision); Date.now() fallback in headless VMs. */
+const hrNow = (typeof performance === "object" && typeof performance?.timeOrigin === "number")
+  ? (perfMs = performance.now()) => performance.timeOrigin + perfMs
+  : () => Date.now();
+
 /* ------------------------------------------------------------------------- */
 /* How the session reaches the save                                           */
 /* ------------------------------------------------------------------------- */
@@ -1482,7 +1487,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
   }
   function onEntities(message) {
     if (role !== "guest") return;
-    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], booms: message.booms || 0, enemies: message.enemies || [], picks: message.picks || 0, efires: Array.isArray(message.efires) ? message.efires : [], rocks: Array.isArray(message.rocks) ? message.rocks : null, at: Date.now() }); } catch (e) {}
+    try { emit("mp-entities", { place: message.place, bullets: message.bullets || [], missiles: message.missiles || [], crates: message.crates || [], fx: message.fx || [], booms: message.booms || 0, enemies: message.enemies || [], picks: message.picks || 0, efires: Array.isArray(message.efires) ? message.efires : [], rocks: Array.isArray(message.rocks) ? message.rocks : null, at: hrNow() }); } catch (e) {}
   }
 
   /**
@@ -1497,7 +1502,7 @@ function createSession({ role, worldId: startWorldId, name, token, save = saveKi
    */
   function onShips(message) {
     if (role !== "guest") return;
-    const now = Date.now();
+    const now = hrNow();
     const mine = ownGuestId();
     const all = Array.isArray(message.ships) ? message.ships : [];
     const own = all.find(entry => entry && entry.id === mine) || null;
