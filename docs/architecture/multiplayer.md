@@ -1,6 +1,6 @@
 # Multiplayer: host-run co-op (step 16)
 
-*Last checked: 2026-11-27 (slices 1–5, 7, 8a/8b playtest-confirmed; **8c + guest parity built to `2026-11-27h`**, 6 last; step 17 planned).* The plan and its eight slices are step 16 of
+*Last checked: 2026-11-28 (slices 1–5, 7, 8a–8c + full guest parity **playtest-confirmed** on `2026-11-27h`; 8d & 6 next; step 17 planned).* The plan and its eight slices are step 16 of
 [../REFACTOR_PLAN.md](../REFACTOR_PLAN.md); this file is how the code works as it is built.
 
 ## The idea
@@ -355,8 +355,8 @@ preserving `tokenHash` across metadata/write-back updates (`tests/playtest24-fix
   curated `RELAYS.relayUrls` (`warnOnRelayFailure: false`).
 
 **Tests:** `tests/multiplayer-guest-sync.test.mjs`, `tests/multiplayer-8c-fixes.test.mjs`,
-`tests/multiplayer-playtest-20261127.test.mjs`, `tests/multiplayer-parity.test.mjs`; guide:
-[../../testing/TESTING-16-SLICE8C.md](../../testing/TESTING-16-SLICE8C.md).
+`tests/multiplayer-playtest-20261127.test.mjs`, `tests/multiplayer-parity.test.mjs`; guide (passed 2026-11-28):
+[../../testing/passed/TESTING-16-SLICE8C.md](../../testing/passed/TESTING-16-SLICE8C.md).
 
 **Away means this world is paused, and the card says so** (owner, playtests 18 and 20): the four rules,
 word for word, in [../archive/MULTIPLAYER_SLICE5_NOTES.md](../archive/MULTIPLAYER_SLICE5_NOTES.md).
